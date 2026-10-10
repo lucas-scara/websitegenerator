@@ -10,7 +10,7 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
   const [hidden, setHidden] = useState(false)
   const [open, setOpen] = useState(false)
-  const [mobileGroup, setMobileGroup] = useState("Services")
+  const [mobileGroup, setMobileGroup] = useState("Serviços")
   const [menuOpen, setMenuOpen] = useState(false)
   const lastY = useRef(0)
   const { pathname } = useLocation()
@@ -45,14 +45,14 @@ export default function Navbar() {
     <>
       <nav
         className={`fixed top-3 sm:top-5 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.25rem)] sm:w-[calc(100%-2rem)] max-w-6xl rounded-full isolate transition-transform duration-500 px-3 sm:px-4 py-2.5 ${hidden && !menuOpen ? '-translate-y-[140%]' : 'translate-y-0'}`}
-        aria-label={"Main navigation"}
+        aria-label={"Navegação principal"}
       >
         <span
           aria-hidden="true"
           className={`pointer-events-none absolute inset-0 -z-10 rounded-full bg-white/90 backdrop-blur-xl shadow-xl shadow-deep/10 transition-opacity duration-300 ${scrolled || menuOpen ? 'opacity-100' : 'opacity-0'}`}
         />
         <div className="flex items-center justify-between gap-4">
-          <Link to="/" className="flex items-center shrink-0 pl-1 group" aria-label={copy("Your Company — home")}>
+          <Link to="/" className="flex items-center shrink-0 pl-1 group" aria-label={copy("Your Company — início")}>
             <Logo tone={onDark ? 'light' : 'dark'} className="transition-transform duration-500 group-hover:scale-[1.02]" />
           </Link>
 
@@ -91,8 +91,8 @@ export default function Navbar() {
                         <div className="flex items-center gap-3">
                           <span className="h-9 w-9 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center"><Zap className="h-4 w-4 text-accent" strokeWidth={2.4} /></span>
                           <div>
-                            <p className="font-display font-semibold text-sm">{"Need urgent help?"}</p>
-                            <p className="text-white/60 text-xs">{"Contact us to discuss your requirements."}</p>
+                            <p className="font-display font-semibold text-sm">{"Precisa de ajuda?"}</p>
+                            <p className="text-white/60 text-xs">{"Entre em contato para conversar sobre suas necessidades."}</p>
                           </div>
                         </div>
                         <a href={SITE.phoneHref} className="magnetic-btn inline-flex items-center gap-2 bg-white text-deep px-4 py-2 rounded-full text-sm font-semibold"><Phone className="h-4 w-4" /> {SITE.phone}</a>
@@ -116,16 +116,16 @@ export default function Navbar() {
               type="button"
               onClick={() => scrollToForm(navigate)}
               className={`magnetic-btn inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-colors ${onDark ? 'bg-white text-deep shadow-deep/20' : 'bg-primary text-deep shadow-primary/30'}`}
-            >{"\n              Get a quote "}<ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
+            >{"\n              Peça um orçamento "}<ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
             </button>
           </div>
 
           {/* Mobile controls */}
           <div className="flex lg:hidden items-center gap-1">
-            <a href={SITE.phoneHref} aria-label={"Call us"} className={`h-10 w-10 rounded-full flex items-center justify-center transition-colors ${onDark ? 'bg-white text-deep' : 'bg-primary text-deep'}`}>
+            <a href={SITE.phoneHref} aria-label={"Ligue para nós"} className={`h-10 w-10 rounded-full flex items-center justify-center transition-colors ${onDark ? 'bg-white text-deep' : 'bg-primary text-deep'}`}>
               <Phone className="h-4 w-4" strokeWidth={2.4} />
             </a>
-            <button type="button" onClick={() => setOpen(true)} className={`h-10 w-10 rounded-full flex items-center justify-center ${onDark ? 'text-white' : 'text-ink'}`} aria-label={"Open menu"}>
+            <button type="button" onClick={() => setOpen(true)} className={`h-10 w-10 rounded-full flex items-center justify-center ${onDark ? 'text-white' : 'text-ink'}`} aria-label={"Abrir menu"}>
               <Menu className="h-5 w-5" />
             </button>
           </div>
@@ -138,7 +138,7 @@ export default function Navbar() {
         <div className={`absolute top-0 left-0 right-0 max-h-[100dvh] overflow-y-auto bg-background rounded-b-5xl px-6 pt-6 pb-10 transition-transform duration-500 ${open ? 'translate-y-0' : '-translate-y-full'}`}>
           <div className="flex items-center justify-between mb-8">
             <Logo tone="dark" />
-            <button type="button" onClick={() => setOpen(false)} className="h-10 w-10 rounded-full bg-divider/50 flex items-center justify-center" aria-label={"Close menu"}>
+            <button type="button" onClick={() => setOpen(false)} className="h-10 w-10 rounded-full bg-divider/50 flex items-center justify-center" aria-label={"Fechar menu"}>
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -148,7 +148,7 @@ export default function Navbar() {
                 <div key={item.label} className="border-b border-divider">
                   <div className="flex items-center justify-between">
                     <Link to={item.href} className="font-display text-2xl font-semibold text-ink py-3">{item.label}</Link>
-                    <button type="button" onClick={() => setMobileGroup(mobileGroup === item.label ? '' : item.label)} className="h-10 w-10 rounded-full flex items-center justify-center text-ink" aria-label={"Show submenu"}>
+                    <button type="button" onClick={() => setMobileGroup(mobileGroup === item.label ? '' : item.label)} className="h-10 w-10 rounded-full flex items-center justify-center text-ink" aria-label={"Abrir submenu"}>
                       <ChevronDown className={`h-5 w-5 transition-transform ${mobileGroup === item.label ? 'rotate-180' : ''}`} />
                     </button>
                   </div>
@@ -173,13 +173,13 @@ export default function Navbar() {
             )}
           </div>
           <div className="mt-8 grid gap-3">
-            <button type="button" onClick={() => { setOpen(false); setTimeout(() => scrollToForm(navigate), 350) }} className="magnetic-btn flex items-center justify-center gap-2 bg-primary text-deep px-6 py-4 rounded-full font-semibold w-full">{"\n              Get a quote "}<ArrowUpRight className="h-4 w-4" />
+            <button type="button" onClick={() => { setOpen(false); setTimeout(() => scrollToForm(navigate), 350) }} className="magnetic-btn flex items-center justify-center gap-2 bg-primary text-deep px-6 py-4 rounded-full font-semibold w-full">{"\n              Peça um orçamento "}<ArrowUpRight className="h-4 w-4" />
             </button>
             <a href={SITE.phoneHref} className="flex items-center justify-center gap-2 bg-deep text-white px-6 py-4 rounded-full font-semibold w-full">
-              <Phone className="h-4 w-4" />{" Call "}{SITE.phone}
+              <Phone className="h-4 w-4" />{" Ligar "}{SITE.phone}
             </a>
           </div>
-          <p className="mt-6 text-center text-xs text-muted">{"Mon–Thu 07:00–15:00 · Friday 07:00–14:00 · "}{SITE.hoursNote}</p>
+          <p className="mt-6 text-center text-xs text-muted">{SITE.hoursNote}</p>
         </div>
       </div>
     </>

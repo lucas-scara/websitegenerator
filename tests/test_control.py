@@ -18,7 +18,7 @@ class LedgerTests(unittest.TestCase):
         self.old_email=os.environ.get('BR_COMMERCIAL_EMAIL'); self.old_phone=os.environ.get('BR_COMMERCIAL_PHONE')
         os.environ['BR_COMMERCIAL_EMAIL']='contato@scarasoft.example'
         os.environ['BR_COMMERCIAL_PHONE']='+55 11 90000-0000'
-        self.bid=control.batch('Plumbers','Boston')['id']
+        self.bid=control.batch('Plumbers','Boston',5)['id']
         self.authorize()
     def tearDown(self):
         control.DB=self.old; control.OUTREACH_AUTH_FILE=self.old_auth
@@ -33,7 +33,7 @@ class LedgerTests(unittest.TestCase):
             'batch_id':self.bid,'industry':batch['industry'],'city':batch['city'],
             'max_contacts':min(max_contacts,batch['requested_count'])}))
     def message(self, body='Olá'):
-        return body+'\ncontato@scarasoft.example\n+55 11 90000-0000\nscarasoft — Lucas Scaranello'
+        return body+'\nhttps://preview.example\ncontato@scarasoft.example\n+55 11 90000-0000\nscarasoft — Lucas Scaranello'
     def add(self,n=0): return control.add(self.bid,f'Business {n}',f'https://business{n}.example')['id']
     def ready(self):
         jid=self.add(); control.claim(self.bid,'worker')
@@ -76,6 +76,18 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'scope'):
             control.contact_begin(jid,'worker',self.message(),'https://business0.example/contact')
         self.assertEqual(control.snapshot()['jobs'][0]['stage'],'ready')
+    def test_contact_simulation_records_draft_without_submission(self):
+        jid=self.ready()
+        control.OUTREACH_AUTH_FILE.unlink()
+        result=control.contact_simulate(jid,'worker',self.message(),'https://business0.example/contact')
+        self.assertEqual(result['stage'],'simulated')
+        with control.connect() as c:
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM submissions').fetchone()[0],0)
+        job=control.snapshot()['jobs'][0]
+        self.assertEqual(job['contact_status'],'simulated')
+        self.assertEqual(job['data']['contact_simulation']['form_url'],'https://business0.example/contact')
+        self.assertEqual(control.snapshot()['workers'][0]['status'],'idle')
+        with self.assertRaises(ValueError): control.contact_begin(jid,'worker',self.message(),'https://business0.example/contact')
     def test_parallel_claims_unique_and_capacity(self):
         ids={self.add(n) for n in range(5)}
         def claim(i):

@@ -11,32 +11,32 @@ import { TrustSignals } from '../components/HomeSections.jsx'
 
 
 export default function AboutPage() {
-  useSEO({ title: copy("About Your Company | Your Company"), description: "Discuss your electrical needs with us. We can talk through the work, timing and quotation for your property.", path: '/about', image: asset("/images/interior.jpg") })
+  useSEO({ title: copy("Sobre Your Company | Your Company"), description: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.", path: '/about', image: asset("/images/interior.jpg") })
   const facts = [
-    { Icon: MapPin, title: "Based for your home", text: `${SITE.street}, ${SITE.zip} ${SITE.city}. We cover all of your area and also help customers around the local community.` },
-    { Icon: ShieldCheck, title: "Electrical services", text: "Contact us to discuss your requirements." },
-    { Icon: Users, title: "Personal communication", text: "Talk through your requirements and ask questions before work begins." },
-    { Icon: Award, title: "Experience that matters", text: "We never compromise on the quality of our work and keep up to date on the latest technology and applicable legal requirements." },
+    { Icon: MapPin, title: "Para sua casa", text: `${SITE.street}, ${SITE.zip} ${SITE.city}. We cover all of your area and also help customers around the local community.` },
+    { Icon: ShieldCheck, title: "Serviços elétricos", text: "Entre em contato para conversar sobre suas necessidades." },
+    { Icon: Users, title: "Comunicação direta", text: "Converse sobre suas necessidades e tire dúvidas antes do serviço." },
+    { Icon: Award, title: "Experiência relevante", text: "Converse com a empresa sobre experiência, qualificação e exigências aplicáveis ao seu projeto." },
   ]
   return (
     <>
       <PageHero
         image={asset("/images/electrician.jpg")}
-        imageAlt={copy("About Your Company")}
-        crumbs={[{ label: "Home", href: '/' }, { label: copy("About Your Company"), href: '/about' }]}
-        eyebrow={"About us · electricians for your home"}
-        h1={copy("About Your Company")}
-        intro={["Your electrician for your home — serving homeowners, associations and businesses in the local community."]}
+        imageAlt={copy("Sobre Your Company")}
+        crumbs={[{ label: "Início", href: '/' }, { label: copy("Sobre Your Company"), href: '/about' }]}
+        eyebrow={"Sobre nós · eletricistas para sua casa"}
+        h1={copy("Sobre Your Company")}
+        intro={["Serviços elétricos para residências, condomínios e empresas da região."]}
       />
       <section className="px-6 sm:px-10 lg:px-16 pt-16 sm:pt-24 pb-10">
         <div className="max-w-6xl mx-auto">
-          <Reveal><div className="rounded-5xl bg-deep text-white p-16 text-center">Electrical solutions for the spaces you use every day.</div></Reveal>
+          <Reveal><div className="rounded-5xl bg-deep text-white p-16 text-center">Soluções elétricas para os espaços do seu dia a dia.</div></Reveal>
         </div>
       </section>
       <section className="px-6 sm:px-10 lg:px-16 py-16 sm:py-24">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-12 gap-12 items-center">
           <div className="lg:col-span-6">
-            <SectionHeading eyebrow={"Who we are"} title={"Electricians committed to"} flourish={"quality and craftsmanship."} lead={copy("When you choose Your Company, you don't just get an electrician - you get a partner with a focus on safety, quality and good communication.")} />
+            <SectionHeading eyebrow={"Quem somos"} title={"Eletricistas com atenção à"} flourish={"qualidade do serviço."} lead={copy("Em Your Company, você pode conversar sobre seu projeto elétrico com atenção à segurança, à qualidade e à comunicação.")} />
             <div className="mt-10 grid sm:grid-cols-2 gap-4">
               {facts.map((f, i) => (
                 <Reveal key={f.title} delay={i * 80}>
@@ -51,7 +51,7 @@ export default function AboutPage() {
           </div>
           <Reveal delay={120} className="lg:col-span-6">
             <div className="relative rounded-5xl overflow-hidden shadow-2xl shadow-primary/15">
-              <img src={asset("/images/interior.jpg")} alt={"Modern interior — illustrative stock photograph"} loading="lazy" className="w-full h-[420px] sm:h-[520px] object-cover object-top" />
+              <img src={asset("/images/interior.jpg")} alt={"Interior moderno — imagem ilustrativa"} loading="lazy" className="w-full h-[420px] sm:h-[520px] object-cover object-top" />
               <div className="absolute inset-0 bg-gradient-to-t from-deep/70 via-transparent to-transparent" />
               <div className="absolute bottom-5 left-5 right-5 flex flex-wrap gap-2">
                 {BADGES.map((b) => <span key={b.src} className="bg-white/95 rounded-xl px-3 py-2"><img src={b.src} alt={b.alt} className="h-5 w-auto object-contain" /></span>)}

@@ -1,4 +1,4 @@
 interface:
-  display_name: "Parallel Business Revamp"
-  short_description: "One scout feeds fresh builders that deploy and send"
-  default_prompt: "Use $local-business-revamp-parallel to run a batch for an industry and state, use one fresh city scout at a time feeding fresh builder/sender agents, and coordinate routine authorization until the completed target is reached."
+  display_name: "Website Generator Brasil · lotes"
+  short_description: "Um scout por cidade e builders por empresa, com envio simulado"
+  default_prompt: "Use $local-business-revamp-parallel para organizar um lote de eletricistas em cidade ou estado brasileiro, preservando evidências e deduplicação. Simule o contato até haver autorização específica de Lucas para o lote."

@@ -1,6 +1,6 @@
 # Firecrawl-first prospect screening
 
-Use this for the candidate-screening stage of real batches. Discovery still uses Google in `iab` with the assigned city/state and page-10 rule. Firecrawl replaces routine original-site browsing, not final public-preview verification or submission. Never use it to evade a browser approval, solve CAPTCHA, fill a form or send outreach.
+Use este fluxo para triagem de candidatos em lotes brasileiros. Descubra empresas por buscas relevantes de eletricistas e cidade/estado brasileiro no navegador `iab`; registre consultas e páginas verificadas. Não há regra fixa de começar na página 10. Firecrawl apoia a triagem, mas não substitui a verificação pública da prévia nem a checagem final do formulário. Nunca o use para contornar aprovação, resolver CAPTCHA, preencher formulário ou enviar contato. Sem autorização de lote, opere em simulação.
 
 ## One reusable cache per business
 
@@ -33,6 +33,6 @@ If Firecrawl fails, lacks credentials/credits, returns incomplete evidence or ca
 
 ## Builder/sender boundary
 
-The builder reads the scout's cached evidence and generates from the existing template. Before sending, it verifies the public preview and reopens the original contact form in its private browser, checking current fields, restrictions and challenge state. It follows the normal authorization, `contact-begin`, single-click and `contact-finish` sequence. Firecrawl screening is never permission to bypass a required confirmation or retry an uncertain send.
+The builder reads the scout's cached evidence and generates from the existing template. Antes de qualquer envio autorizado, o builder verifica a prévia pública e reabre o formulário original no navegador, conferindo campos e restrições atuais. Sem autorização específica de Lucas, apenas simula. No lote autorizado, segue `contact-begin`, clique único e `contact-finish`. Firecrawl screening is never permission to bypass a required confirmation or retry an uncertain send.
 
 Qualified businesses with no usable form follow [Manual outreach](manual-outreach.md). Missing form access changes the sending route, not the decision to generate their website.

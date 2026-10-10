@@ -11,19 +11,19 @@ import { QuoteBtn } from '../components/Buttons.jsx'
 
 /* All prices and terms verbatim from /pricing */
 const GROUPS = [
- {title: 'Small electrical jobs', label: 'Tell us what you need', lines: [{name: 'Lighting, sockets and everyday updates', price: 'Request a quote', unit: 'Based on your requirements'}]},
- {title: 'Renovations and installations', label: 'Plan the work', lines: [{name: 'Discuss the scope and materials', price: 'Request a quote', unit: 'For your specific project'}]},
- {title: 'Fault finding', label: 'Describe the issue', lines: [{name: 'Assessment and next steps', price: 'Contact us', unit: 'Confirm availability'}]},
- {title: 'Scheduling', lines: [{name: 'Preferred timing', text: 'Contact us to discuss a suitable time for the work.'}]},
- {title: 'Your quotation', accent: true, lines: [{name: 'Understand the costs', text: 'Ask for the scope, materials, labour and any additional charges in writing.'}]},
- {title: 'Access and location', lines: [{name: 'Property details', text: 'Let us know the address and any access requirements when you enquire.'}]},
+ {title: 'Pequenos serviços elétricos', label: 'Conte o que precisa', lines: [{name: 'Iluminação, tomadas e melhorias do dia a dia', price: 'Solicite um orçamento', unit: 'Conforme suas necessidades'}]},
+ {title: 'Reformas e instalações', label: 'Planeje o serviço', lines: [{name: 'Converse sobre escopo e materiais', price: 'Solicite um orçamento', unit: 'Para seu projeto'}]},
+ {title: 'Avaliação de falhas', label: 'Descreva o problema', lines: [{name: 'Avaliação e próximos passos', price: 'Entre em contato', unit: 'Consulte a disponibilidade'}]},
+ {title: 'Agendamento', lines: [{name: 'Data desejada', text: 'Entre em contato para combinar um horário adequado.'}]},
+ {title: 'Seu orçamento', accent: true, lines: [{name: 'Entenda os custos', text: 'Peça por escrito o escopo, os materiais, a mão de obra e eventuais cobranças adicionais.'}]},
+ {title: 'Acesso e localização', lines: [{name: 'Dados do imóvel', text: 'Informe o endereço e os requisitos de acesso ao fazer contato.'}]},
 ]
-const FINE_PRINT = ['Ask which materials and charges are included in your quotation.', 'Confirm the agreed scope and timing before work begins.']
+const FINE_PRINT = ['Confira quais materiais e custos estão incluídos no orçamento.', 'Confirme escopo e prazo antes do início do serviço.']
 
 export default function PricesPage() {
   useSEO({
-    title: copy("Electrical quotes for your home | Your Company"),
-    description: "Request a quote based on your property and the electrical work you need.",
+    title: copy("Orçamentos elétricos para sua casa | Your Company"),
+    description: "Peça um orçamento para o serviço elétrico que seu imóvel precisa.",
     path: '/pricing',
     image: asset("/images/panel-testing.jpg"),
   })
@@ -31,20 +31,20 @@ export default function PricesPage() {
     <>
       <PageHero
         image={asset("/images/panel-testing.jpg")}
-        imageAlt={"Electrical quotes for your home"}
-        crumbs={[{ label: "Home", href: '/' }, { label: "Prices", href: '/pricing' }]}
-        eyebrow={"Prices & terms · request a quotation"}
-        h1={"Electrical quotes for your home"}
+        imageAlt={"Orçamentos elétricos para sua casa"}
+        crumbs={[{ label: "Início", href: '/' }, { label: "Orçamentos", href: '/pricing' }]}
+        eyebrow={"Orçamentos e condições · solicite uma proposta"}
+        h1={"Orçamentos elétricos para sua casa"}
         intro={[
-          "Tell us about the work you need. A quotation can take account of your property, the scope and the materials involved.",
-          "Contact us to discuss the next steps and confirm availability.",
+          "Descreva o serviço desejado. O orçamento pode considerar o imóvel, o escopo e os materiais necessários.",
+          "Entre em contato para conversar sobre os próximos passos e verificar disponibilidade.",
         ]}
       />
 
       <section className="relative px-6 sm:px-10 lg:px-16 pt-20 sm:pt-28 pb-10">
         <div className="max-w-7xl mx-auto">
-          <SectionHeading eyebrow={"Prices & terms"} title={"Prices &"} flourish={"Terms"} lead={"Ask what is included in your quote, including materials, labour and applicable taxes."} />
-          <Reveal delay={120} className="mt-8 inline-flex items-center gap-2 rounded-full bg-deep text-white px-4 py-2 font-mono text-[11px] uppercase tracking-widest">{"Contact us to discuss your requirements."}</Reveal>
+          <SectionHeading eyebrow={"Orçamentos e condições"} title={"Orçamentos e"} flourish={"condições"} lead={"Confira no orçamento o escopo, os materiais, a mão de obra e os impostos aplicáveis."} />
+          <Reveal delay={120} className="mt-8 inline-flex items-center gap-2 rounded-full bg-deep text-white px-4 py-2 font-mono text-[11px] uppercase tracking-widest">{"Entre em contato para conversar sobre suas necessidades."}</Reveal>
 
           <div className="mt-8 grid md:grid-cols-2 gap-5">
             {GROUPS.map((g, i) => (
@@ -81,7 +81,7 @@ export default function PricesPage() {
           <Reveal className="mt-12 rounded-4xl bg-primary/5 border border-primary/15 p-6 sm:p-8">
             <div className="flex items-center gap-3 mb-4">
               <span className="h-9 w-9 rounded-2xl bg-primary/10 text-primary-dark flex items-center justify-center"><Info className="h-4 w-4" /></span>
-              <h2 className="font-display font-bold text-2xl text-ink">{"The small print — clear and simple:"}</h2>
+              <h2 className="font-display font-bold text-2xl text-ink">{"Detalhes para conferir:"}</h2>
             </div>
             <ul className="space-y-3">
               {FINE_PRINT.map((f, i) => (
@@ -91,7 +91,7 @@ export default function PricesPage() {
                 </li>
               ))}
             </ul>
-            <div className="mt-6"><QuoteBtn>{"Get a no-obligation quote"}</QuoteBtn></div>
+            <div className="mt-6"><QuoteBtn>{"Peça um orçamento"}</QuoteBtn></div>
           </Reveal>
         </div>
       </section>

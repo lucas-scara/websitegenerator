@@ -29,7 +29,7 @@ export function Btn({ href, to, children, variant = 'primary', size = 'md', icon
 }
 
 /* Smart CTA: scrolls to the quote form on the current page, else navigates to /contact */
-export function QuoteBtn({ children = "Get a quote", ...props }) {
+export function QuoteBtn({ children = "Peça um orçamento", ...props }) {
   const navigate = useNavigate()
   return (
     <Btn onClick={() => scrollToForm(navigate)} icon="up" {...props}>

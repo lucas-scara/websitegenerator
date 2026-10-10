@@ -15,7 +15,7 @@ import { SmartBtn } from '../components/Buttons.jsx'
 
 /* ---------- helpers ---------- */
 function findService(path) {
-  const group = NAV.find((n) => n.label === "Services")
+  const group = NAV.find((n) => n.label === "Serviços")
   for (const c of group.children) {
     if (c.href === path) return { item: c, parent: null }
     if (c.children) for (const s of c.children) if (s.href === path) return { item: s, parent: c }
@@ -30,10 +30,10 @@ function findArea(path) {
   return null
 }
 function crumbsFor(data) {
-  const c = [{ label: "Home", href: '/' }]
+  const c = [{ label: "Início", href: '/' }]
   const svc = findService(data.path)
   if (svc) {
-    c.push({ label: "Services", href: '/services' })
+    c.push({ label: "Serviços", href: '/services' })
     if (svc.parent) c.push({ label: svc.parent.label, href: svc.parent.href })
     c.push({ label: svc.item.label, href: data.path })
     return c
@@ -41,8 +41,8 @@ function crumbsFor(data) {
   const area = findArea(data.path)
   if (area) {
     const parentHref = area.key === 'elektriker' ? '/maintenance' : area.key === 'installatoer' ? '/electrical-installation' : '/rewiring'
-    const parentLabel = area.key === 'elektriker' ? "Electrician" : area.key === 'installatoer' ? "Electrical contractor" : "Electrical renovation"
-    c.push({ label: "Services", href: '/services' }, { label: parentLabel, href: parentHref }, { label: area.item.label, href: data.path })
+    const parentLabel = area.key === 'elektriker' ? "Eletricista" : area.key === 'installatoer' ? "Prestador de serviços elétricos" : "Reforma elétrica"
+    c.push({ label: "Serviços", href: '/services' }, { label: parentLabel, href: parentHref }, { label: area.item.label, href: data.path })
     return c
   }
   c.push({ label: data.h1, href: data.path })
@@ -50,14 +50,14 @@ function crumbsFor(data) {
 }
 function relatedFor(data) {
   const area = findArea(data.path)
-  if (area) return { title: "We also cover", links: area.list.filter((a) => a.href !== data.path) }
+  if (area) return { title: "Também atendemos", links: area.list.filter((a) => a.href !== data.path) }
   const svc = findService(data.path)
   if (svc) {
-    const group = NAV.find((n) => n.label === "Services")
+    const group = NAV.find((n) => n.label === "Serviços")
     const siblings = svc.parent ? svc.parent.children : group.children
-    return { title: svc.parent ? `More about ${svc.parent.label.toLowerCase()}` : "Other services", links: siblings.filter((s) => s.href !== data.path).map((s) => ({ label: s.label, href: s.href })) }
+    return { title: svc.parent ? `Mais sobre ${svc.parent.label.toLowerCase()}` : "Outros serviços", links: siblings.filter((s) => s.href !== data.path).map((s) => ({ label: s.label, href: s.href })) }
   }
-  return { title: "Services", links: NAV.find((n) => n.label === "Services").children.map((s) => ({ label: s.label, href: s.href })) }
+  return { title: "Serviços", links: NAV.find((n) => n.label === "Serviços").children.map((s) => ({ label: s.label, href: s.href })) }
 }
 
 /* Split blocks into "article runs" separated by full-width special sections */
@@ -140,12 +140,12 @@ function Aside({ related, variant }) {
       {variant === 0 && (
         <Reveal className="rounded-4xl bg-deep text-white p-6 overflow-hidden relative">
           <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-primary/30 blur-2xl" />
-          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-primary-light">{"Need an electrician?"}</p>
-          <p className="font-display font-bold text-2xl mt-2 leading-tight">{"Call us for prompt help."}</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-primary-light">{"Precisa de um eletricista?"}</p>
+          <p className="font-display font-bold text-2xl mt-2 leading-tight">{"Ligue para conversar."}</p>
           <a href={SITE.phoneHref} className="magnetic-btn mt-5 inline-flex w-full items-center justify-center gap-2 bg-white text-deep px-5 py-3.5 rounded-full font-semibold"><Phone className="h-4 w-4" /> {SITE.phone}</a>
           <a href={SITE.emailHref} className="mt-2 inline-flex w-full items-center justify-center gap-2 bg-white/10 border border-white/15 text-white px-5 py-3 rounded-full text-sm font-medium hover:bg-white/15 transition"><Mail className="h-4 w-4" /> {SITE.email}</a>
           <div className="mt-5 pt-5 border-t border-white/10 text-xs text-white/60 space-y-1">
-            <p className="inline-flex items-center gap-2 text-white/80"><Clock className="h-3.5 w-3.5 text-primary-light" />{" Opening hours"}</p>
+            <p className="inline-flex items-center gap-2 text-white/80"><Clock className="h-3.5 w-3.5 text-primary-light" />{" Horários"}</p>
             {SITE.hours.map(([d, h]) => <p key={d}>{d}: {h}</p>)}
             <p className="italic">{SITE.hoursNote}</p>
           </div>
@@ -165,9 +165,9 @@ function Aside({ related, variant }) {
       </Reveal>
       {variant === 0 && (
         <Reveal delay={120} className="rounded-4xl bg-primary/5 border border-primary/15 p-6">
-          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-primary-dark">{"Your quotation"}</p>
-          <p className="text-sm text-muted mt-2 leading-relaxed">{"Discuss the scope and request a quotation for your project."}</p>
-          <Link to="/pricing" className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-primary-dark">{"View prices "}<ArrowRight className="h-4 w-4" /></Link>
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-primary-dark">{"Seu orçamento"}</p>
+          <p className="text-sm text-muted mt-2 leading-relaxed">{"Converse sobre o escopo e peça um orçamento para seu projeto."}</p>
+          <Link to="/pricing" className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-primary-dark">{"Ver orçamentos "}<ArrowRight className="h-4 w-4" /></Link>
         </Reveal>
       )}
     </div>
@@ -188,7 +188,7 @@ export default function ContentPage({ data }) {
         image={data.heroImage || (data.heroImages && data.heroImages[0]) || asset("/images/interior.jpg")}
         imageAlt={data.heroImageAlt}
         crumbs={crumbsFor(data)}
-        eyebrow={"Electrical services"}
+        eyebrow={"Serviços elétricos"}
         h1={data.h1}
         intro={data.intro}
         ctas={data.heroCtas}
@@ -224,11 +224,11 @@ export default function ContentPage({ data }) {
           <section key={i} className="px-6 sm:px-10 lg:px-16 py-16 sm:py-24">
             <div className="max-w-7xl mx-auto">
               <Reveal className="mb-8">
-                <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-primary-dark">{"╱ Inspiration"}</span>
-                <h2 className="font-display font-extrabold text-3xl sm:text-4xl md:text-5xl text-ink mt-3 tracking-tight">{"See our work"}</h2>
+                <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-primary-dark">{"╱ Inspiração"}</span>
+                <h2 className="font-display font-extrabold text-3xl sm:text-4xl md:text-5xl text-ink mt-3 tracking-tight">{"Veja as imagens"}</h2>
               </Reveal>
               <Gallery items={seg.block.items} />
-              <Reveal className="mt-8"><Link to="/inspiration" className="inline-flex items-center gap-2 font-semibold text-primary-dark">{"View all projects "}<ArrowRight className="h-4 w-4" /></Link></Reveal>
+              <Reveal className="mt-8"><Link to="/inspiration" className="inline-flex items-center gap-2 font-semibold text-primary-dark">{"Ver todas as imagens "}<ArrowRight className="h-4 w-4" /></Link></Reveal>
             </div>
           </section>
         )

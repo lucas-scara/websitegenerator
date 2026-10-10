@@ -12,7 +12,7 @@ export default function MobileCallBar() {
         <a href={SITE.phoneHref} className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-white text-deep font-semibold py-3 text-sm">
           <Phone className="h-4 w-4" strokeWidth={2.4} /> {SITE.phone}
         </a>
-        <button type="button" onClick={() => scrollToForm(navigate)} className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-primary text-deep font-semibold py-3 text-sm">{"\n          Get a quote "}<ArrowUpRight className="h-4 w-4" strokeWidth={2.4} />
+        <button type="button" onClick={() => scrollToForm(navigate)} className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-primary text-deep font-semibold py-3 text-sm">{"\n          Peça um orçamento "}<ArrowUpRight className="h-4 w-4" strokeWidth={2.4} />
         </button>
       </div>
     </div>
