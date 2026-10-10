@@ -1,8 +1,9 @@
+import { isServiceEnabled } from './services.js'
 import { useEffect } from 'react'
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { REDIRECTS } from './site.js'
+import { REDIRECTS, GALLERY } from './site.js'
 import ScrollToTop from './lib/ScrollToTop.jsx'
 import Navbar from './components/Navbar.jsx'
 import Footer from './components/Footer.jsx'
@@ -20,7 +21,7 @@ gsap.registerPlugin(ScrollTrigger)
 
 /* Every transcribed page module registers its own route by `path` */
 const contentModules = import.meta.glob('./content/*.js', { eager: true })
-export const CONTENT_PAGES = Object.values(contentModules).map((m) => m.default).filter((p) => p && p.path)
+export const CONTENT_PAGES = Object.values(contentModules).map((m) => m.default).filter((p) => p && p.path && isServiceEnabled(p.path))
 
 function Layout() {
   useEffect(() => {
@@ -49,7 +50,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/pricing" element={<PricesPage />} />
-        <Route path="/inspiration" element={<ReferencesPage />} />
+        {GALLERY.length > 0 && <Route path="/inspiration" element={<ReferencesPage />} />}
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         {CONTENT_PAGES.map((p) => (

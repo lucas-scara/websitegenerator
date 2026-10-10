@@ -21,7 +21,7 @@ Verifique se o formulário original tem campo de mensagem e botão de envio e ac
 
 ## Gerar e verificar
 
-Colete nome, pelo menos um contato público e, se disponível, endereço com fontes. Escolha `theme_color` pela marca ou use azul de eletricista `#2563eb`. Não invente horários, preços, avaliações, certificações, equipe, disponibilidade ou projetos. Use [produção rápida](references/production.md): o gerador copia o build preparado e altera apenas nome, telefone, e-mail, rua, cidade, CEP e cor. Não execute `templates/electrician/scripts/prerender.mjs`. Confira nome, links de contato, layout e rotas do site gerado.
+Colete nome, pelo menos um contato público e, se disponível, endereço com fontes. Escolha `theme_color` pela marca ou use azul de eletricista `#2563eb`. Não invente horários, preços, avaliações, certificações, equipe, disponibilidade ou projetos. Use [produção rápida](references/production.md): o gerador copia o build preparado e injeta dados e `enabled_services`. Ative somente IDs do catálogo com serviço explicitamente confirmado no site original; registre ID, URL e evidência em `runs/JOB_ID/service-evidence.json`, fora de `site/`. Na dúvida, deixe desativado. Não execute `templates/electrician/scripts/prerender.mjs`. Confira nome, links de contato, layout e rotas do site gerado.
 
 Publique a cópia em projeto Vercel isolado `revamp-JOB_ID`, usando apenas escopo aprovado de Lucas. Confira `.vercel/project.json` antes do deploy. Verifique publicamente a URL, página inicial, rota de serviço, imagens, CTA e `noindex`. Não altere projetos existentes, domínios ou proteção da conta. CLI bem-sucedida, sozinha, não prova que a prévia é pública.
 

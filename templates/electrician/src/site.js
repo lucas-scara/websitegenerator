@@ -1,10 +1,11 @@
+import { enabledItems, isServiceEnabled } from './services.js'
 import { asset } from './business.js'
 import { BUSINESS } from './business.js'
 export const SITE = BUSINESS
 
 
 /* Primary navigation — mirrors the original site's menu hierarchy */
-export const NAV = [
+const ALL_NAV = [
   { label: "Início", href: '/' },
   {
     label: "Serviços",
@@ -42,7 +43,7 @@ export const NAV = [
 ]
 
 /* Footer menu — identical items/labels to the original footer (legacy hrefs resolved to their redirect targets) */
-export const FOOTER_MENU = [
+const ALL_FOOTER_MENU = [
   { label: "Início", href: '/' },
   { label: "Serviços", href: '/services' },
   { label: "Reforma completa", href: '/renovations' },
@@ -60,7 +61,7 @@ export const FOOTER_MENU = [
 export const AREAS = { elektriker: [{label: 'Serviços elétricos na região', href: '/contact'}], installatoer: [], renovering: [] }
 
 /* The six service cards from the original front page (labels, blurbs, images and targets verbatim) */
-export const HOME_SERVICES = [
+const ALL_HOME_SERVICES = [
   {
     title: "Reparos elétricos",
     text: "Converse conosco sobre falhas, quedas de energia e necessidades elétricas em casa.",
@@ -112,16 +113,16 @@ export const HOME_SERVICES = [
 ]
 
 /* Project gallery (from /inspiration) */
-export const GALLERY = [
-  { src: asset("/images/pendant.jpg"), alt: "Luminária pendente — imagem ilustrativa", category: "Iluminação" },
-  { src: asset("/images/outdoor-lighting.jpg"), alt: "Iluminação de jardim — imagem ilustrativa", category: "Áreas externas" },
-  { src: asset("/images/lamp-detail.jpg"), alt: "Detalhe de luminária — imagem ilustrativa", category: "Iluminação" },
-  { src: asset("/images/interior.jpg"), alt: "Iluminação de cozinha — imagem ilustrativa", category: "Interiores" },
-  { src: asset("/images/ev-charging.jpg"), alt: "Recarga de veículo elétrico — imagem ilustrativa", category: "Recarga de veículos elétricos" },
-  { src: asset("/images/cafe-lighting.jpg"), alt: "Luminárias de vidro — imagem ilustrativa", category: "Iluminação" },
-  { src: asset("/images/house-dusk.jpg"), alt: "Casa ao anoitecer — imagem ilustrativa", category: "Áreas externas" },
+const ALL_GALLERY = [
+  { src: asset("/images/pendant.jpg"), alt: "Luminária pendente — imagem ilustrativa", category: "Iluminação", service: "/electrical-installation" },
+  { src: asset("/images/outdoor-lighting.jpg"), alt: "Iluminação de jardim — imagem ilustrativa", category: "Áreas externas", service: "/electrical-installation" },
+  { src: asset("/images/lamp-detail.jpg"), alt: "Detalhe de luminária — imagem ilustrativa", category: "Iluminação", service: "/electrical-installation" },
+  { src: asset("/images/interior.jpg"), alt: "Iluminação de cozinha — imagem ilustrativa", category: "Interiores", service: "/electrical-installation" },
+  { src: asset("/images/ev-charging.jpg"), alt: "Recarga de veículo elétrico — imagem ilustrativa", category: "Recarga de veículos elétricos", service: "/ev-charging" },
+  { src: asset("/images/cafe-lighting.jpg"), alt: "Luminárias de vidro — imagem ilustrativa", category: "Iluminação", service: "/electrical-installation" },
+  { src: asset("/images/house-dusk.jpg"), alt: "Casa ao anoitecer — imagem ilustrativa", category: "Áreas externas", service: "/electrical-installation" },
 ]
-export const GALLERY_FILTERS = ["Todos", "Iluminação", "Interiores", "Áreas externas", "Recarga de veículos elétricos"]
+const ALL_GALLERY_FILTERS = ["Todos", "Iluminação", "Interiores", "Áreas externas", "Recarga de veículos elétricos"]
 
 export const TRUST_STATS = [
   { value: 'Cuidado', label: 'em cada detalhe' },
@@ -134,3 +135,17 @@ export const BADGES = []
 
 /* Old-site paths that 301'd — preserved as client-side redirects */
 export const REDIRECTS = {}
+
+export const GALLERY = ALL_GALLERY.filter((item) => !item.service || isServiceEnabled(item.service))
+function visibleNavChildren(children) {
+  return children.flatMap((child) => {
+    const nested = child.children ? enabledItems(child.children) : []
+    return isServiceEnabled(child.href)
+      ? [{ ...child, ...(child.children ? { children: nested } : {}) }]
+      : nested // Keep verified child services visible when their parent service is off.
+  })
+}
+export const NAV = ALL_NAV.filter((item) => item.href !== '/inspiration' || GALLERY.length).map((item) => item.children ? { ...item, children: visibleNavChildren(item.children) } : item)
+export const FOOTER_MENU = enabledItems(ALL_FOOTER_MENU).filter((item) => item.href !== '/inspiration' || GALLERY.length)
+export const HOME_SERVICES = enabledItems(ALL_HOME_SERVICES)
+export const GALLERY_FILTERS = ALL_GALLERY_FILTERS.filter((label) => label === 'Todos' || GALLERY.some((item) => item.category === label))

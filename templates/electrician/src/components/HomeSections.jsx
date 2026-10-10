@@ -52,7 +52,7 @@ export function Pillars() {
   const pillars = [
     { n: '01', title: "Experiência", target: 'Cuidado', suffix: '', label: "em cada detalhe", desc: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
     { n: '02', title: "Atendimento", target: 'Confiança', suffix: '', label: "construída no atendimento", desc: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
-    { n: '03', title: "Avaliação de falhas", target: 'Aqui', suffix: '', label: "para conversar", desc: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
+    { n: '03', title: "Conversa inicial", target: 'Aqui', suffix: '', label: "para conversar", desc: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
   ]
 
   return (
@@ -124,7 +124,7 @@ export function Protocol() {
       image: asset("/images/pendant.jpg"), alt: "Iluminação de interior — imagem ilustrativa",
     },
     {
-      num: '02', title: "Instalação", tagline: "Desde o início.", meta: "Serviços elétricos",
+      num: '02', title: "Planejamento", tagline: "Desde o início.", meta: "Serviços elétricos",
       text: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.",
       image: asset("/images/panel-testing.jpg"), alt: "Quadro elétrico — imagem ilustrativa",
     },

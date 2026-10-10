@@ -1,3 +1,4 @@
+import { enabledItems } from '../services.js'
 import { asset } from '../business.js'
 import { copy } from '../business.js'
 import { Link } from 'react-router-dom'
@@ -11,7 +12,7 @@ import SectionHeading from '../components/SectionHeading.jsx'
 import ContactSection from '../components/ContactSection.jsx'
 import Reviews from '../components/Reviews.jsx'
 
-const ALL = [
+const ALL = enabledItems([
   { Icon: Siren, label: "Reparos elétricos", href: '/electrical-repairs', text: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
   { Icon: Plug, label: "Instalações elétricas", href: '/electrical-installation', text: "Iluminação, tomadas e atualização de instalações elétricas." },
   { Icon: ShieldAlert, label: "Dispositivo DR", href: '/rcd-protection', text: "Dispositivo de proteção para situações de falha elétrica." },
@@ -23,7 +24,7 @@ const ALL = [
   { Icon: LayoutGrid, label: "Reforma completa", href: '/renovations', text: "Serviços elétricos nas etapas de uma reforma residencial." },
   { Icon: Wrench, label: "Manutenção elétrica", href: '/maintenance', text: "Manutenção e verificação da instalação elétrica." },
   { Icon: BatteryCharging, label: "Carregador para veículo elétrico", href: '/ev-charging', text: "Converse sobre opções de recarga para seu imóvel." },
-]
+])
 
 export default function ServicesPage() {
   useSEO({

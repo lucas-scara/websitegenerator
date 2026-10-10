@@ -21,6 +21,32 @@ class QuickSiteTests(unittest.TestCase):
             self.assertNotIn("O'Brien",(Path(b['site'])/'business.js').read_text())
             self.assertFalse((Path(a['site'])/'node_modules').exists())
             self.assertIn('noindex', (Path(a['site'])/'vercel.json').read_text())
+    def test_service_catalog_validation_and_safe_legacy_default(self):
+        _, legacy = quick.validate({'name': 'Legacy', 'phone': '123456789'})
+        self.assertEqual(legacy['enabled_services'], [])
+        for services in ('ev-charging', ['unknown'], ['ev-charging', 'ev-charging'], [42]):
+            with self.subTest(services=services), self.assertRaisesRegex(ValueError, 'enabled_services'):
+                quick.validate({'name': 'Test', 'phone': '123456789', 'enabled_services': services})
+        self.assertEqual(set(quick.SERVICE_CATALOG), {
+            'electrical-repairs', 'electrical-installation', 'rcd-protection',
+            'electrical-enclosures', 'consumer-units', 'rewiring',
+            'electrical-contracting', 'extensions', 'renovations',
+            'maintenance', 'ev-charging',
+        })
+
+    def test_two_service_configs_share_build_but_keep_business_data_separate(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(quick.subprocess, 'run', side_effect=AssertionError('Unexpected build')):
+            a = quick.create({'name': 'Without EV', 'phone': '123456789', 'enabled_services': ['maintenance']}, folder)
+            b = quick.create({'name': 'With EV', 'phone': '123456789', 'enabled_services': ['ev-charging']}, folder)
+            def payload(result):
+                return json.loads((Path(result['site']) / 'business.js').read_text().split(' = ', 1)[1].removesuffix(';\n'))
+            self.assertEqual(payload(a)['enabled_services'], ['maintenance'])
+            self.assertEqual(payload(b)['enabled_services'], ['ev-charging'])
+            self.assertEqual(
+                sorted(p.name for p in (Path(a['site']) / 'assets').iterdir()),
+                sorted(p.name for p in (Path(b['site']) / 'assets').iterdir()),
+            )
+
     def test_invalid_input(self):
         for data in ({'name':'Business'}, {'name':'Business','phone':'javascript:alert(1)'}, {'name':'Business','email':'invalid'}, {'name':'Business','phone':'12345','template':'../outside'}):
             with self.assertRaises(ValueError): quick.validate(data)
