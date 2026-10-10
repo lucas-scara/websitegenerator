@@ -7,7 +7,7 @@ export default function Gallery({ items, filters, limit, className = '' }) {
   const [filter, setFilter] = useState(filters ? filters[0] : null)
   const [active, setActive] = useState(-1)
 
-  const visible = (filter && filter !== "All" ? items.filter((i) => i.category === filter) : items).slice(0, limit || items.length)
+  const visible = (filter && filter !== "Todos" ? items.filter((i) => i.category === filter) : items).slice(0, limit || items.length)
 
   useEffect(() => {
     if (active < 0) return
@@ -39,7 +39,7 @@ export default function Gallery({ items, filters, limit, className = '' }) {
       )}
 
       {visible.length === 0 ? (
-        <Reveal className="rounded-4xl border border-dashed border-divider p-12 text-center text-muted">{"\n          There are no pictures in this category yet.\n        "}</Reveal>
+        <Reveal className="rounded-4xl border border-dashed border-divider p-12 text-center text-muted">{"\n          Ainda não há imagens nesta categoria.\n        "}</Reveal>
       ) : (
         <div className="columns-1 sm:columns-2 lg:columns-3 gap-4 [&>*]:mb-4">
           {visible.map((it, i) => (
@@ -66,13 +66,13 @@ export default function Gallery({ items, filters, limit, className = '' }) {
 
       {active >= 0 && visible[active] && (
         <div className="fixed inset-0 z-[80] bg-deep/95 backdrop-blur-sm flex items-center justify-center p-4 sm:p-10" onClick={() => setActive(-1)} role="dialog" aria-modal="true">
-          <button type="button" aria-label={"Close"} onClick={() => setActive(-1)} className="absolute top-5 right-5 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20">
+          <button type="button" aria-label={"Fechar"} onClick={() => setActive(-1)} className="absolute top-5 right-5 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20">
             <X className="h-5 w-5" />
           </button>
-          <button type="button" aria-label={"Previous"} onClick={(e) => { e.stopPropagation(); setActive((a) => (a - 1 + visible.length) % visible.length) }} className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20">
+          <button type="button" aria-label={"Anterior"} onClick={(e) => { e.stopPropagation(); setActive((a) => (a - 1 + visible.length) % visible.length) }} className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <button type="button" aria-label={"Next"} onClick={(e) => { e.stopPropagation(); setActive((a) => (a + 1) % visible.length) }} className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20">
+          <button type="button" aria-label={"Próxima"} onClick={(e) => { e.stopPropagation(); setActive((a) => (a + 1) % visible.length) }} className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20">
             <ChevronRight className="h-5 w-5" />
           </button>
           <figure className="max-w-6xl w-full text-center" onClick={(e) => e.stopPropagation()}>

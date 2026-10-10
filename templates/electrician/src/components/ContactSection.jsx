@@ -3,14 +3,14 @@ import { SITE } from '../site.js'
 import QuoteForm from './QuoteForm.jsx'
 import Reveal from '../lib/Reveal.jsx'
 
-const DEFAULT_TEXT = "Have a question or need more information? Send us a message and we will get back to you as soon as possible."
+const DEFAULT_TEXT = "Tem dúvidas? Entre em contato por telefone ou e-mail."
 
-/* The "Kom i kontakt" section that lives on every page of the original site. */
-export default function ContactSection({ heading = "Contact", text = DEFAULT_TEXT, id = 'kontakt', formId = 'kontakt-form', showForm = true }) {
+/* The "Entre em contato" section that lives on every page of the original site. */
+export default function ContactSection({ heading = "Contato", text = DEFAULT_TEXT, id = 'kontakt', formId = 'kontakt-form', showForm = true }) {
   const rows = [
-    { Icon: Phone, label: "Call us directly", value: SITE.phone, href: SITE.phoneHref },
-    { Icon: Mail, label: "Email us", value: SITE.email, href: SITE.emailHref },
-    { Icon: MapPin, label: "Address", value: SITE.address },
+    { Icon: Phone, label: "Ligue diretamente", value: SITE.phone, href: SITE.phoneHref },
+    { Icon: Mail, label: "Envie um e-mail", value: SITE.email, href: SITE.emailHref },
+    { Icon: MapPin, label: "Endereço", value: SITE.address },
   ]
   return (
     <section id={id} className="relative py-24 sm:py-32 px-6 sm:px-10 lg:px-16 bg-background overflow-hidden">
@@ -19,7 +19,7 @@ export default function ContactSection({ heading = "Contact", text = DEFAULT_TEX
         <div className="grid lg:grid-cols-12 gap-10 lg:gap-16">
           <div className="lg:col-span-5">
             <Reveal>
-              <span className="font-mono text-[11px] sm:text-xs uppercase tracking-[0.28em] text-primary-dark">{"╱ Contact"}</span>
+              <span className="font-mono text-[11px] sm:text-xs uppercase tracking-[0.28em] text-primary-dark">{"╱ Contato"}</span>
               <h2 className="font-display font-extrabold text-4xl sm:text-5xl md:text-6xl text-ink mt-4 leading-[1.04] tracking-tight">
                 {heading}
               </h2>
@@ -55,7 +55,7 @@ export default function ContactSection({ heading = "Contact", text = DEFAULT_TEX
                     <Clock className="h-5 w-5 text-primary" />
                   </span>
                   <span>
-                    <span className="block font-mono text-[10px] uppercase tracking-widest text-muted">{"Opening hours"}</span>
+                    <span className="block font-mono text-[10px] uppercase tracking-widest text-muted">{"Horários"}</span>
                     <span className="block font-display font-semibold text-ink text-base leading-relaxed">
                       {SITE.hours.map(([d, h]) => <span key={d} className="block">{d}: {h}</span>)}
                     </span>

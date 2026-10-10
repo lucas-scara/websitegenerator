@@ -5,129 +5,129 @@ export const SITE = BUSINESS
 
 /* Primary navigation — mirrors the original site's menu hierarchy */
 export const NAV = [
-  { label: "Home", href: '/' },
+  { label: "Início", href: '/' },
   {
-    label: "Services",
+    label: "Serviços",
     href: '/services',
     children: [
-      { label: "Electrical repairs", href: '/electrical-repairs', blurb: "Contact us to discuss your requirements." },
+      { label: "Reparos elétricos", href: '/electrical-repairs', blurb: "Entre em contato para conversar sobre suas necessidades." },
       {
-        label: "Electrical installation",
+        label: "Instalações elétricas",
         href: '/electrical-installation',
-        blurb: "Lighting, sockets and new installations",
+        blurb: "Iluminação, tomadas e novas instalações",
         children: [
-          { label: "RCD safety switch", href: '/rcd-protection' },
-          { label: "Electrical enclosure installation", href: '/electrical-enclosures' },
-          { label: "Consumer unit replacement", href: '/consumer-units' },
+          { label: "Dispositivo DR", href: '/rcd-protection' },
+          { label: "Instalação de quadro elétrico", href: '/electrical-enclosures' },
+          { label: "Troca de quadro elétrico", href: '/consumer-units' },
         ],
       },
       {
-        label: "Electrical renovation",
+        label: "Reforma elétrica",
         href: '/rewiring',
-        blurb: "From old to new — throughout your home",
+        blurb: "Atualização elétrica para sua casa",
         children: [
-          { label: "Electrical contracting", href: '/electrical-contracting' },
-          { label: "Extensions", href: '/extensions' },
-          { label: "Full renovation", href: '/renovations' },
+          { label: "Projetos elétricos", href: '/electrical-contracting' },
+          { label: "Ampliações", href: '/extensions' },
+          { label: "Reforma completa", href: '/renovations' },
         ],
       },
-      { label: "Electrical maintenance", href: '/maintenance', blurb: "Reliable power every day" },
-      { label: "EV charger", href: '/ev-charging', blurb: "EV chargers — properly installed" },
+      { label: "Manutenção elétrica", href: '/maintenance', blurb: "Cuidados com a instalação elétrica" },
+      { label: "Carregador para veículo elétrico", href: '/ev-charging', blurb: "Instalação de carregadores para veículos elétricos" },
     ],
   },
-  { label: "Prices", href: '/pricing' },
-  { label: "Inspiration", href: '/inspiration' },
-  { label: "About", href: '/about' },
-  { label: "Contact", href: '/contact' },
+  { label: "Orçamentos", href: '/pricing' },
+  { label: "Inspiração", href: '/inspiration' },
+  { label: "Sobre", href: '/about' },
+  { label: "Contato", href: '/contact' },
 ]
 
 /* Footer menu — identical items/labels to the original footer (legacy hrefs resolved to their redirect targets) */
 export const FOOTER_MENU = [
-  { label: "Home", href: '/' },
-  { label: "Services", href: '/services' },
-  { label: "Full renovation", href: '/renovations' },
-  { label: "Electrical repairs", href: '/electrical-repairs' },
-  { label: "Electrical installation", href: '/electrical-installation' },
-  { label: "Electrician", href: '/maintenance' },
-  { label: "EV charging stations", href: '/ev-charging' },
-  { label: "Inspiration", href: '/inspiration' },
-  { label: "Extensions", href: '/extensions' },
-  { label: "Prices", href: '/pricing' },
-  { label: "Contact", href: '/contact' },
+  { label: "Início", href: '/' },
+  { label: "Serviços", href: '/services' },
+  { label: "Reforma completa", href: '/renovations' },
+  { label: "Reparos elétricos", href: '/electrical-repairs' },
+  { label: "Instalações elétricas", href: '/electrical-installation' },
+  { label: "Eletricista", href: '/maintenance' },
+  { label: "Pontos de recarga", href: '/ev-charging' },
+  { label: "Inspiração", href: '/inspiration' },
+  { label: "Ampliações", href: '/extensions' },
+  { label: "Orçamentos", href: '/pricing' },
+  { label: "Contato", href: '/contact' },
 ]
 
 /* Local landing pages */
-export const AREAS = { elektriker: [{label: 'Local electrical services', href: '/contact'}], installatoer: [], renovering: [] }
+export const AREAS = { elektriker: [{label: 'Serviços elétricos na região', href: '/contact'}], installatoer: [], renovering: [] }
 
 /* The six service cards from the original front page (labels, blurbs, images and targets verbatim) */
 export const HOME_SERVICES = [
   {
-    title: "Electrical repairs",
-    text: "Quick help in case of sudden failure, power failure or urgent electrical problems at home.",
+    title: "Reparos elétricos",
+    text: "Converse conosco sobre falhas, quedas de energia e necessidades elétricas em casa.",
     href: '/electrical-repairs',
     image: asset("/images/panel-testing.jpg"),
-    alt: "Electrical panel testing — stock photograph",
+    alt: "Quadro elétrico — imagem ilustrativa",
     icon: 'Siren',
   },
   {
-    title: "Extensions",
-    text: "Correct and secure electrical installations for new spaces and extensions of the dwelling.",
+    title: "Ampliações",
+    text: "Instalações elétricas para novos espaços e ampliações residenciais.",
     href: '/extensions',
     image: asset("/images/house-dusk.jpg"),
-    alt: "A home illuminated at dusk — stock photograph",
+    alt: "Casa iluminada ao anoitecer — imagem ilustrativa",
     icon: 'HousePlus',
   },
   {
-    title: "Full renovation",
-    text: "Updating and replacing electrical installations as part of a total renovation of housing.",
+    title: "Reforma completa",
+    text: "Atualização de instalações elétricas em reformas residenciais.",
     href: '/renovations',
     image: asset("/images/interior.jpg"),
-    alt: "Renovated kitchen interior — stock photograph",
+    alt: "Cozinha renovada — imagem ilustrativa",
     icon: 'Hammer',
   },
   {
-    title: "Electrical maintenance",
-    text: "Professional solid electrical work for private customers, carried out with a focus on quality and safety.",
+    title: "Manutenção elétrica",
+    text: "Serviços elétricos residenciais com atenção à qualidade e à segurança.",
     href: '/maintenance',
     image: asset("/images/electrician.jpg"),
-    alt: "Electrician with tools — stock photograph",
+    alt: "Eletricista com ferramentas — imagem ilustrativa",
     icon: 'Wrench',
   },
   {
-    title: "EV chargers",
-    text: "Setting up and connecting EV chargers to private homes with correct installation.",
+    title: "Carregadores para veículos elétricos",
+    text: "Instalação de carregadores para veículos elétricos em residências.",
     href: '/ev-charging',
     image: asset("/images/ev-charging.jpg"),
-    alt: "Electric vehicle charging — stock photograph",
+    alt: "Recarga de veículo elétrico — imagem ilustrativa",
     icon: 'BatteryCharging',
   },
   {
-    title: "Electrical installation",
-    text: "Professional electrical installations for both smaller tasks and larger solutions in the home.",
+    title: "Instalações elétricas",
+    text: "Instalações elétricas para diferentes necessidades residenciais.",
     href: '/electrical-installation',
     image: asset("/images/cafe-lighting.jpg"),
-    alt: "Decorative pendant lighting — stock photograph",
+    alt: "Luminárias decorativas — imagem ilustrativa",
     icon: 'Plug',
   },
 ]
 
 /* Project gallery (from /inspiration) */
 export const GALLERY = [
-  { src: asset("/images/pendant.jpg"), alt: "Minimal pendant lighting — stock photograph", category: "Lighting" },
-  { src: asset("/images/outdoor-lighting.jpg"), alt: "Garden and exterior lighting — stock photograph", category: "Exteriors" },
-  { src: asset("/images/lamp-detail.jpg"), alt: "Sculptural lamp detail — stock photograph", category: "Lighting" },
-  { src: asset("/images/interior.jpg"), alt: "Kitchen lighting inspiration — stock photograph", category: "Interiors" },
-  { src: asset("/images/ev-charging.jpg"), alt: "Electric vehicle charging — stock photograph", category: "EV charging" },
-  { src: asset("/images/cafe-lighting.jpg"), alt: "Glass pendant lights — stock photograph", category: "Lighting" },
-  { src: asset("/images/house-dusk.jpg"), alt: "A home at dusk — stock photograph", category: "Exteriors" },
+  { src: asset("/images/pendant.jpg"), alt: "Luminária pendente — imagem ilustrativa", category: "Iluminação" },
+  { src: asset("/images/outdoor-lighting.jpg"), alt: "Iluminação de jardim — imagem ilustrativa", category: "Áreas externas" },
+  { src: asset("/images/lamp-detail.jpg"), alt: "Detalhe de luminária — imagem ilustrativa", category: "Iluminação" },
+  { src: asset("/images/interior.jpg"), alt: "Iluminação de cozinha — imagem ilustrativa", category: "Interiores" },
+  { src: asset("/images/ev-charging.jpg"), alt: "Recarga de veículo elétrico — imagem ilustrativa", category: "Recarga de veículos elétricos" },
+  { src: asset("/images/cafe-lighting.jpg"), alt: "Luminárias de vidro — imagem ilustrativa", category: "Iluminação" },
+  { src: asset("/images/house-dusk.jpg"), alt: "Casa ao anoitecer — imagem ilustrativa", category: "Áreas externas" },
 ]
-export const GALLERY_FILTERS = ["All", "Lighting", "Interiors", "Exteriors", "EV charging"]
+export const GALLERY_FILTERS = ["Todos", "Iluminação", "Interiores", "Áreas externas", "Recarga de veículos elétricos"]
 
 export const TRUST_STATS = [
-  { value: 'Care', label: 'in every detail' },
-  { value: 'Quality', label: 'workmanship' },
-  { value: 'Clear', label: 'communication' },
-  { value: 'Local', label: 'service' },
+  { value: 'Cuidado', label: 'em cada detalhe' },
+  { value: 'Qualidade', label: 'no trabalho' },
+  { value: 'Clareza', label: 'na comunicação' },
+  { value: 'Local', label: 'atendimento' },
 ]
 
 export const BADGES = []

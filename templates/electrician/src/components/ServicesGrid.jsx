@@ -22,7 +22,7 @@ export default function ServicesGrid({ items, className = '' }) {
               <div className="absolute inset-x-0 bottom-0 p-6 sm:p-7">
                 <h3 className="font-display font-bold text-2xl leading-tight">{s.title}</h3>
                 <p className="text-white/70 text-sm leading-relaxed mt-2 max-w-xs">{s.text}</p>
-                <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary-light">{"\n                  Read more "}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={2.4} />
+                <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary-light">{"\n                  Saiba mais "}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" strokeWidth={2.4} />
                 </span>
               </div>
             </Link>

@@ -2,63 +2,63 @@ import { asset } from '../business.js'
 import { copy } from '../business.js'
 export default {
   "path": "/electrical-enclosures",
-  "title": copy("Electrical enclosures | Your Company"),
-  "description": "Discuss electrical enclosures for your home or business. Contact us to talk through your requirements.",
-  "h1": "Electrical enclosures",
+  "title": copy("Quadros elétricos | Your Company"),
+  "description": "Converse conosco sobre quadros elétricos para sua casa ou empresa.",
+  "h1": "Quadros elétricos",
   "heroImage": asset("/images/panel-testing.jpg"),
-  "heroImageAlt": "Electrical services inspiration — stock photograph",
+  "heroImageAlt": "Serviços elétricos — imagem ilustrativa",
   "heroImages": [
     asset("/images/panel-testing.jpg")
   ],
   "intro": [
-    "Planning electrical enclosures? Tell us about your property, the work you have in mind and your preferred timing. We can discuss the next steps together."
+    "Planejando quadros elétricos? Conte como é o imóvel e o que você pretende fazer. Podemos conversar sobre os próximos passos."
   ],
   "heroCtas": [
     {
-      "label": "Discuss your project",
+      "label": "Fale sobre seu projeto",
       "href": "/contact"
     }
   ],
   "blocks": [
     {
       "type": "h2",
-      "text": "A practical approach to your project"
+      "text": "Uma abordagem prática para seu projeto"
     },
     {
       "type": "p",
-      "md": "Every property is different. The starting point is understanding your existing installation, how you use the space and what you would like to change."
+      "md": "Cada imóvel é diferente. Primeiro, é preciso entender a instalação atual, o uso do espaço e as mudanças desejadas."
     },
     {
       "type": "ul",
       "items": [
-        "Describe the work and any existing issues.",
-        "Discuss access, timing and your preferred outcome.",
-        "Ask about the scope, materials and a written quotation."
+        "Descreva o serviço e os problemas observados.",
+        "Converse sobre acesso, prazo e resultado esperado.",
+        "Peça informações sobre escopo, materiais e orçamento por escrito."
       ]
     },
     {
       "type": "img",
       "src": asset("/images/lamp-detail.jpg"),
-      "alt": "Decorative lamp detail — illustrative stock photography"
+      "alt": "Detalhe de luminária — imagem ilustrativa"
     },
     {
       "type": "h2",
-      "text": "Plan the details before work begins"
+      "text": "Planeje os detalhes antes de iniciar"
     },
     {
       "type": "p",
-      "md": "Contact us to confirm whether this service is suitable for your property, along with availability and any assessment needed before quoting."
+      "md": "Entre em contato para verificar se o serviço atende ao seu imóvel e se é necessária uma avaliação antes do orçamento."
     },
     {
       "type": "faq",
       "items": [
         {
-          "q": "How do I request a quote?",
-          "a": "Call or email with a short description of the work and your contact details."
+          "q": "Como pedir um orçamento?",
+          "a": "Ligue ou envie um e-mail com uma breve descrição do serviço e seus dados de contato."
         },
         {
-          "q": "How much will the work cost?",
-          "a": "The cost depends on the scope, materials and condition of the existing installation. Ask for a quote for your specific project."
+          "q": "Quanto custa o serviço?",
+          "a": "O custo depende do escopo, dos materiais e das condições da instalação. Peça um orçamento para seu caso."
         }
       ]
     },

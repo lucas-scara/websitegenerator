@@ -19,7 +19,8 @@ from quick_site import create as create_quick_site, TEMPLATES
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = Path(os.environ.get('REVAMP_DB', ROOT / 'data' / 'revamp.sqlite3'))
-STAGES = ['queued', 'reviewing', 'extracting', 'building', 'checking', 'deploying', 'ready', 'contacting', 'complete', 'sent', 'uncertain', 'blocked', 'skipped', 'manual']
+OUTREACH_AUTH_FILE = ROOT / 'data' / 'outreach-authorization.json'
+STAGES = ['queued', 'reviewing', 'extracting', 'building', 'checking', 'deploying', 'ready', 'contacting', 'complete', 'sent', 'uncertain', 'blocked', 'skipped', 'manual', 'simulated']
 NEXT = {'queued': ['reviewing'], 'reviewing': ['extracting'], 'extracting': ['building'], 'building': ['checking'], 'checking': ['building', 'deploying'], 'deploying': ['checking', 'ready'], 'ready': ['contacting'], 'contacting': ['complete', 'sent', 'uncertain', 'blocked']}
 
 def now():
@@ -61,7 +62,7 @@ def connect():
     con.execute('PRAGMA journal_mode=WAL')
     con.execute('PRAGMA foreign_keys=ON')
     con.executescript('''
-    CREATE TABLE IF NOT EXISTS batches(id TEXT PRIMARY KEY, industry TEXT NOT NULL, city TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, requested_count INTEGER NOT NULL DEFAULT 5);
+    CREATE TABLE IF NOT EXISTS batches(id TEXT PRIMARY KEY, industry TEXT NOT NULL, city TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, requested_count INTEGER NOT NULL DEFAULT 3);
     CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,batch_id TEXT NOT NULL REFERENCES batches(id),name TEXT NOT NULL,url TEXT NOT NULL,domain TEXT UNIQUE NOT NULL,stage TEXT NOT NULL,worker TEXT,detail TEXT DEFAULT '',reason TEXT DEFAULT '',preview_url TEXT DEFAULT '',contact_status TEXT DEFAULT 'not_sent',data TEXT NOT NULL DEFAULT '{}',updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS identities(identity TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES jobs(id));
     CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,job_id TEXT,message TEXT NOT NULL,created_at TEXT NOT NULL);
@@ -71,7 +72,7 @@ def connect():
     INSERT OR IGNORE INTO config VALUES ('max_workers','3');
     ''')
     if 'requested_count' not in {row['name'] for row in con.execute('PRAGMA table_info(batches)')}:
-        con.execute('ALTER TABLE batches ADD COLUMN requested_count INTEGER NOT NULL DEFAULT 5')
+        con.execute('ALTER TABLE batches ADD COLUMN requested_count INTEGER NOT NULL DEFAULT 3')
     try:
         con.execute('BEGIN IMMEDIATE')
         yield con
@@ -90,7 +91,7 @@ def batch_progress(c, bid):
     if row is None: raise ValueError('Unknown batch')
     counts = dict(c.execute('SELECT stage, COUNT(*) FROM jobs WHERE batch_id=? GROUP BY stage', (bid,)).fetchall())
     completed = sum(counts.get(stage, 0) for stage in ('complete', 'sent'))
-    active = sum(count for stage, count in counts.items() if stage not in ('complete', 'sent', 'skipped', 'blocked', 'uncertain', 'manual'))
+    active = sum(count for stage, count in counts.items() if stage not in ('complete', 'sent', 'skipped', 'blocked', 'uncertain', 'manual', 'simulated'))
     remaining = max(0, row['requested_count'] - completed)
     return {'completed_count': completed, 'active_count': active, 'remaining_count': remaining,
             'manual_count': counts.get('manual', 0), 'available_count': max(0, remaining - active)}
@@ -111,11 +112,11 @@ def snapshot():
         out = {table: [dict(r) for r in c.execute('SELECT * FROM ' + table + (' ORDER BY id DESC LIMIT 200' if table == 'events' else ''))] for table in ('batches', 'jobs', 'events', 'workers')}
         for j in out['jobs']: j['data'] = json.loads(j['data'])
         for b in out['batches']: b.update(batch_progress(c, b['id']))
-        out['settings'] = {'batch_size': 5, 'max_workers': int(c.execute("SELECT value FROM config WHERE key='max_workers'").fetchone()[0])}
+        out['settings'] = {'batch_size': 3, 'max_workers': int(c.execute("SELECT value FROM config WHERE key='max_workers'").fetchone()[0])}
         out['server_time'] = now()
         return out
 
-def batch(industry, city, requested_count=5):
+def batch(industry, city, requested_count=3):
     if not isinstance(industry, str) or not isinstance(city, str) or not industry.strip() or not city.strip():
         raise ValueError('Industry and city are required')
     if len(industry)>150 or len(city)>150: raise ValueError('Use an industry and city under 150 characters')
@@ -149,6 +150,8 @@ def cancel_batch(bid, reason):
 def clear_all(reason):
     """Clear dashboard work records while retaining operational configuration."""
     if not reason.strip(): raise ValueError('Provide a reset reason')
+    if DB.resolve() == (ROOT / 'data' / 'revamp.sqlite3').resolve():
+        raise ValueError('clear-all is disabled for the durable MVP ledger; use a disposable REVAMP_DB for tests')
     with connect() as c:
         counts = {table: c.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] for table in ('batches','jobs','identities','events','workers','submissions')}
         # Delete children before their referenced parents. `config` intentionally survives.
@@ -200,8 +203,8 @@ def update(jid, worker, stage=None, detail='', fields=None):
         j=own(c,jid,worker)
         new=stage or j['stage']
         if new not in STAGES: raise ValueError('Unknown stage')
-        if new in ('contacting','complete','sent','uncertain','manual') and new!=j['stage']: raise ValueError('Use contact-begin, contact-finish or manual-outreach')
-        if new!=j['stage'] and new not in NEXT.get(j['stage'],[]) + (['blocked','skipped'] if j['stage'] not in ('complete','sent','uncertain','blocked','skipped','manual','contacting') else []):
+        if new in ('contacting','complete','sent','uncertain','manual','simulated') and new!=j['stage']: raise ValueError('Use contact-begin, contact-finish, contact-simulate or manual-outreach')
+        if new!=j['stage'] and new not in NEXT.get(j['stage'],[]) + (['blocked','skipped'] if j['stage'] not in ('complete','sent','uncertain','blocked','skipped','manual','simulated','contacting') else []):
             raise ValueError('Invalid stage transition')
         data=json.loads(j['data']); data.update(fields)
         if new != j['stage'] and new in ('building', 'checking'):
@@ -215,15 +218,44 @@ def update(jid, worker, stage=None, detail='', fields=None):
         event(c,jid,detail or f'Stage: {new}')
         return {'id':jid,'stage':new}
 
+def require_outreach_authorization(c, job, message=None):
+    """Fail closed until a specific, locally recorded batch is approved for live contact."""
+    try:
+        auth = json.loads(OUTREACH_AUTH_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        raise ValueError('Live outreach is disabled: local batch authorization is missing')
+    batch = c.execute('SELECT * FROM batches WHERE id=?', (job['batch_id'],)).fetchone()
+    if (not isinstance(auth, dict) or auth.get('mode') != 'live'
+            or auth.get('approved_by') != 'Lucas Scaranello'
+            or auth.get('batch_id') != job['batch_id']
+            or auth.get('industry') != batch['industry']
+            or auth.get('city') != batch['city']
+            or type(auth.get('max_contacts')) is not int
+            or not 1 <= auth['max_contacts'] <= batch['requested_count']):
+        raise ValueError('Live outreach authorization does not match this batch and scope')
+    email = os.environ.get('BR_COMMERCIAL_EMAIL', '').strip()
+    phone = os.environ.get('BR_COMMERCIAL_PHONE', '').strip()
+    if not email or not phone or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+        raise ValueError('Approved commercial email and phone must be configured locally')
+    if message is not None and ('scarasoft — Lucas Scaranello' not in message or email not in message or phone not in message):
+        raise ValueError('Message must contain the approved signature and configured commercial contacts')
+    attempts = c.execute('SELECT COUNT(*) FROM submissions JOIN jobs ON jobs.id=submissions.job_id WHERE jobs.batch_id=?',
+                         (job['batch_id'],)).fetchone()[0]
+    if attempts >= auth['max_contacts']:
+        raise ValueError('Authorized contact limit reached')
+
 def contact_begin(jid,worker,message,form_url):
     if not message.strip(): raise ValueError('Message is empty')
     domain(form_url)
     with connect() as c:
         j=own(c,jid,worker); data=json.loads(j['data'])
+        require_outreach_authorization(c, j, message)
         if data.get('outreach_mode') == 'manual':
             raise ValueError('This job is routed to manual outreach; do not submit automatically')
         if j['stage']!='ready' or data.get('qa_passed') is not True or data.get('preview_verified') is not True or not j['reason']:
             raise ValueError('Ready stage, specific reason, verified preview and passing QA required')
+        if j['preview_url'] not in message:
+            raise ValueError('Message must contain the verified public preview URL')
         qualification=data.get('qualification') or {}
         findings=qualification.get('findings',[]) if isinstance(qualification,dict) else []
         if len([f for f in findings if isinstance(f,str) and f.strip()]) < 2 or not data.get('source_urls') or not data.get('screenshots'):
@@ -234,6 +266,50 @@ def contact_begin(jid,worker,message,form_url):
         c.execute("UPDATE jobs SET stage='contacting',contact_status='attempting',updated_at=? WHERE id=?",(now(),jid))
         event(c,jid,'Submission reserved. One submit attempt permitted; never auto-retry an uncertain result.')
         return {'id':jid,'status':'attempting'}
+
+def contact_simulate(jid, worker, message, form_url):
+    if not message.strip(): raise ValueError('Message is empty')
+    domain(form_url)
+    with connect() as c:
+        j=own(c,jid,worker); data=json.loads(j['data'])
+        if j['stage']!='ready' or data.get('qa_passed') is not True or data.get('preview_verified') is not True or not j['reason']:
+            raise ValueError('Simulation requires a ready, qualified, verified preview')
+        qualification=data.get('qualification') or {}
+        findings=qualification.get('findings',[]) if isinstance(qualification,dict) else []
+        if len([f for f in findings if isinstance(f,str) and f.strip()])<2 or not data.get('source_urls') or not data.get('screenshots'):
+            raise ValueError('Two visual findings, source URLs and screenshots required')
+        if j['preview_url'] not in message:
+            raise ValueError('Message must contain the verified public preview URL')
+        if not c.execute('SELECT 1 FROM identities WHERE identity=? AND job_id=?',('domain:'+domain(form_url),jid)).fetchone():
+            raise ValueError('Contact form must be on the original or verified alias domain')
+        if c.execute('SELECT 1 FROM submissions WHERE job_id=?',(jid,)).fetchone():
+            raise ValueError('A real submission attempt already exists')
+        data['contact_simulation']={'message':message,'form_url':form_url,'created_at':now()}
+        c.execute("UPDATE jobs SET stage='simulated',contact_status='simulated',detail=?,data=?,updated_at=? WHERE id=?",
+                  ('Mensagem preparada em simulação; nenhum formulário enviado.',json.dumps(data),now(),jid))
+        c.execute("UPDATE workers SET status='idle',updated_at=? WHERE id=?",(now(),worker))
+        event(c,jid,'Contato simulado; nenhum submit realizado.')
+        return {'id':jid,'stage':'simulated','contact_status':'simulated'}
+
+def resume_simulated(jid, worker):
+    """Reclaim an unsent simulation only after this exact batch gains live authorization."""
+    if not worker: raise ValueError('Worker ID is required')
+    with connect() as c:
+        j=c.execute('SELECT * FROM jobs WHERE id=?',(jid,)).fetchone()
+        if not j or j['stage']!='simulated': raise ValueError('Only a simulated job can be resumed')
+        if c.execute('SELECT 1 FROM submissions WHERE job_id=?',(jid,)).fetchone():
+            raise ValueError('A real submission attempt already exists')
+        require_outreach_authorization(c,j)
+        if c.execute("SELECT 1 FROM workers WHERE id=? AND status='running'",(worker,)).fetchone():
+            raise ValueError('Worker already owns a running job')
+        limit=int(c.execute("SELECT value FROM config WHERE key='max_workers'").fetchone()[0])
+        if c.execute("SELECT COUNT(*) FROM workers WHERE status='running'").fetchone()[0]>=limit:
+            raise ValueError('Worker capacity reached')
+        c.execute("UPDATE jobs SET stage='ready',worker=?,contact_status='not_sent',updated_at=? WHERE id=?",(worker,now(),jid))
+        c.execute('INSERT INTO workers VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET job_id=excluded.job_id,status=excluded.status,updated_at=excluded.updated_at',(worker,jid,'running',now()))
+        c.execute("UPDATE batches SET status='running' WHERE id=?",(j['batch_id'],))
+        event(c,jid,'Authorized simulation reclaimed; recheck preview, form and message before contact.')
+        return {'id':jid,'stage':'ready','worker':worker}
 
 def contact_finish(jid,worker,status,evidence):
     if status not in ('submitted','sent','uncertain','blocked') or not evidence.strip(): raise ValueError('Provide result and observed evidence')
@@ -335,7 +411,7 @@ def serve(port):
                     result=create_quick_site(data)
                     result['preview_url']='/preview/'+result['id']+'/'
                     self.send(201,result)
-                else: self.send(201,batch(data.get('industry'),data.get('city'),data.get('requested_count',5)))
+                else: self.send(201,batch(data.get('industry'),data.get('city'),data.get('requested_count',3)))
             except (ValueError,AttributeError) as e: self.send(400,{'error':str(e)})
     server=ThreadingHTTPServer(('127.0.0.1',port),Handler)
     print(f'Contact sheet: http://127.0.0.1:{server.server_port}',flush=True)
@@ -345,13 +421,15 @@ def main():
     p=argparse.ArgumentParser(description=__doc__); sub=p.add_subparsers(dest='cmd',required=True)
     sub.add_parser('state')
     s=sub.add_parser('serve'); s.add_argument('--port',type=int,default=4310)
-    s=sub.add_parser('batch'); s.add_argument('--industry',required=True); s.add_argument('--city',required=True); s.add_argument('--count',type=int,default=5)
+    s=sub.add_parser('batch'); s.add_argument('--industry',required=True); s.add_argument('--city',required=True); s.add_argument('--count',type=int,default=3)
     s=sub.add_parser('add'); s.add_argument('--batch',required=True); s.add_argument('--name',required=True); s.add_argument('--url',required=True); s.add_argument('--alias',action='append',default=[])
     s=sub.add_parser('claim'); s.add_argument('--batch',required=True); s.add_argument('--worker',required=True)
     s=sub.add_parser('update'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--stage',choices=STAGES); s.add_argument('--detail',default=''); s.add_argument('--fields',type=Path)
     s=sub.add_parser('alias'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--identity',required=True)
     s=sub.add_parser('capacity'); s.add_argument('count',type=int,choices=range(1,6))
     s=sub.add_parser('contact-begin'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--form-url',required=True)
+    s=sub.add_parser('contact-simulate'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--form-url',required=True)
+    s=sub.add_parser('resume-simulated'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True)
     s=sub.add_parser('contact-finish'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--status',choices=['submitted','sent','uncertain','blocked'],required=True); s.add_argument('--evidence',required=True)
     s=sub.add_parser('manual-outreach'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--reason',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--email',default=''); s.add_argument('--phone',default='')
     s=sub.add_parser('recover'); s.add_argument('--job',required=True); s.add_argument('--reason',required=True)
@@ -367,6 +445,8 @@ def main():
         elif a.cmd=='claim': result=claim(a.batch,a.worker)
         elif a.cmd=='update': result=update(a.job,a.worker,a.stage,a.detail,json.loads(a.fields.read_text()) if a.fields else None)
         elif a.cmd=='contact-begin': result=contact_begin(a.job,a.worker,a.message_file.read_text(),a.form_url)
+        elif a.cmd=='contact-simulate': result=contact_simulate(a.job,a.worker,a.message_file.read_text(),a.form_url)
+        elif a.cmd=='resume-simulated': result=resume_simulated(a.job,a.worker)
         elif a.cmd=='contact-finish': result=contact_finish(a.job,a.worker,a.status,a.evidence)
         elif a.cmd=='manual-outreach': result=manual_outreach(a.job,a.worker,a.reason,a.message_file.read_text(),a.email,a.phone)
         elif a.cmd=='capacity':
@@ -385,7 +465,7 @@ def main():
                 if not j: raise ValueError('Unknown job')
                 # Never recycle an outreach attempt, even after a process crash.
                 attempt=c.execute('SELECT 1 FROM submissions WHERE job_id=?',(a.job,)).fetchone()
-                if j['stage'] in ('complete','sent','manual'): raise ValueError('Sent or manual outreach jobs cannot be automatically recovered')
+                if j['stage'] in ('complete','sent','manual','simulated'): raise ValueError('Terminal outreach jobs cannot be automatically recovered')
                 target='uncertain' if attempt else 'queued'
                 c.execute('UPDATE jobs SET stage=?,worker=NULL,updated_at=?,contact_status=? WHERE id=?',(target,now(),'uncertain' if attempt else j['contact_status'],a.job))
                 c.execute("UPDATE workers SET status='idle',updated_at=? WHERE job_id=?",(now(),a.job))

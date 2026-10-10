@@ -16,12 +16,12 @@ export default function Footer() {
         {/* Top tagline + team photo */}
         <div className="grid lg:grid-cols-12 gap-10 items-end border-b border-white/10 pb-12 mb-12">
           <Reveal className="lg:col-span-7">
-            <h2 className="font-display font-extrabold text-5xl sm:text-6xl md:text-7xl leading-[0.95] tracking-tight">{"\n              Your electrician\n              "}{' '}
-              <span className="font-serif italic font-medium text-primary-light block">{"for your home."}</span>
+            <h2 className="font-display font-extrabold text-5xl sm:text-6xl md:text-7xl leading-[0.95] tracking-tight">{"\n              Seu eletricista\n              "}{' '}
+              <span className="font-serif italic font-medium text-primary-light block">{"para sua casa."}</span>
             </h2>
-            <p className="text-white/55 max-w-md mt-6">{"\n              For homeowners, associations and businesses in your local community — on time and at the agreed price.\n            "}</p>
+            <p className="text-white/55 max-w-md mt-6">{"\n              Serviços elétricos para residências e empresas. Consulte disponibilidade e orçamento.\n            "}</p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <QuoteBtn variant="primary">{"Get a quote"}</QuoteBtn>
+              <QuoteBtn variant="primary">{"Peça um orçamento"}</QuoteBtn>
               <a href={SITE.phoneHref} className="lift-on-hover inline-flex items-center gap-2 bg-white/10 border border-white/15 text-white px-6 py-3.5 rounded-full font-semibold">
                 <Phone className="h-4 w-4" /> {SITE.phone}
               </a>
@@ -29,11 +29,11 @@ export default function Footer() {
           </Reveal>
           <Reveal delay={150} className="lg:col-span-5">
             <div className="relative rounded-4xl overflow-hidden border border-white/10 shadow-2xl">
-              <img src={asset("/images/house-dusk.jpg")} alt={"A home at dusk — illustrative stock photograph"} loading="lazy" className="w-full h-64 sm:h-72 object-cover object-top" />
+              <img src={asset("/images/house-dusk.jpg")} alt={"Casa ao anoitecer — imagem ilustrativa"} loading="lazy" className="w-full h-64 sm:h-72 object-cover object-top" />
               <div className="absolute inset-0 bg-gradient-to-t from-deep/70 to-transparent" />
               <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-full pl-3 pr-4 py-1.5 text-deep">
                 <span className="relative flex h-2 w-2"><span className="absolute inset-0 rounded-full bg-emerald-500 animate-ping" /><span className="relative h-2 w-2 rounded-full bg-emerald-500" /></span>
-                <span className="font-mono text-[10px] uppercase tracking-widest">{"Ready to help"}</span>
+                <span className="font-mono text-[10px] uppercase tracking-widest">{"Para conversar"}</span>
               </div>
             </div>
           </Reveal>
@@ -42,7 +42,7 @@ export default function Footer() {
         {/* Columns */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-12 gap-10">
           <div className="col-span-2 lg:col-span-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">{"Company details"}</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">{"Dados da empresa"}</p>
             <div className="mb-5"><Logo tone="light" size="lg" /></div>
             <p className="text-white/70 text-sm leading-relaxed">
               <span className="font-semibold text-white">{SITE.name}</span><br />
@@ -59,22 +59,22 @@ export default function Footer() {
           </div>
 
           <div className="lg:col-span-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">{"Contact"}</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">{"Contato"}</p>
             <ul className="space-y-3 text-sm">
               <li>
-                <span className="block text-white/40 text-xs">{"Phone:"}</span>
+                <span className="block text-white/40 text-xs">{"Telefone:"}</span>
                 <a href={SITE.phoneHref} className="text-white/85 hover:text-primary-light transition inline-flex items-center gap-2"><Phone className="h-3.5 w-3.5" /> {SITE.phone}</a>
               </li>
               <li>
-                <span className="block text-white/40 text-xs">Email:</span>
+                <span className="block text-white/40 text-xs">E-mail:</span>
                 <a href={SITE.emailHref} className="text-white/85 hover:text-primary-light transition inline-flex items-center gap-2 break-all"><Mail className="h-3.5 w-3.5 shrink-0" /> {SITE.email}</a>
               </li>
               <li>
-                <span className="block text-white/40 text-xs">{"Address:"}</span>
+                <span className="block text-white/40 text-xs">{"Endereço:"}</span>
                 <span className="text-white/85 inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5" /> {SITE.address}</span>
               </li>
             </ul>
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-3 mt-8">{"Opening hours"}</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-3 mt-8">{"Horários"}</p>
             <ul className="space-y-1.5 text-sm text-white/75">
               {SITE.hours.map(([d, h]) => <li key={d}>{d}: {h}</li>)}
             </ul>
@@ -94,7 +94,7 @@ export default function Footer() {
           </div>
 
           <div className="col-span-2 md:col-span-4 lg:col-span-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">{"Areas we cover"}</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">{"Área atendida"}</p>
             <ul className="grid grid-cols-2 gap-x-6 gap-y-2">
               {AREAS.elektriker.map((a) => (
                 <li key={a.href}><Link to={a.href} className="text-sm text-white/75 hover:text-primary-light transition">{a.label.replace(/^Elektriker i /, '')}</Link></li>
@@ -107,15 +107,15 @@ export default function Footer() {
         <div className="mt-14 pt-8 border-t border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex flex-wrap items-center gap-3">
             <a href={SITE.phoneHref} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm hover:bg-white/15 transition"><Phone className="h-3.5 w-3.5" /> {SITE.phone}</a>
-            <a href={SITE.emailHref} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm hover:bg-white/15 transition"><Mail className="h-3.5 w-3.5" /> Send email</a>
-            <span className="text-white/50 text-sm">Website concept by Albert</span>
+            <a href={SITE.emailHref} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm hover:bg-white/15 transition"><Mail className="h-3.5 w-3.5" /> Enviar e-mail</a>
+            <span className="text-white/50 text-sm">Prévia ilustrativa de site</span>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-white/50 text-xs font-mono">
             <span>Copyright © {new Date().getFullYear()} - {SITE.name}</span>
             <span className="hidden sm:inline">|</span>
-            <span>Preview only · no enquiries collected</span>
+            <span>Prévia demonstrativa · sem coleta de mensagens</span>
             <span className="hidden sm:inline">|</span>
-            <span>Stock photos for illustration</span>
+            <span>Imagens meramente ilustrativas</span>
           </div>
         </div>
       </div>

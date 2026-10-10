@@ -1,3 +1,4 @@
+throw new Error('Legacy prerender is disabled for the Brasil MVP; use the prepared Vite build.');
 /* Prerender every route of the built site into dist/<route>/index.html using the local Chrome.
    Usage: npm run build && node scripts/prerender.mjs   (or: npm run build:static) */
 import { createServer } from 'node:http'

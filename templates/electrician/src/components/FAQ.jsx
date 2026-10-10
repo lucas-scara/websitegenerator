@@ -3,8 +3,8 @@ import { Plus } from 'lucide-react'
 import { renderMd } from '../lib/md.jsx'
 import Reveal from '../lib/Reveal.jsx'
 
-/* Accordion FAQ + FAQPage structured data for rich results. */
-export default function FAQ({ items, title = "Frequently asked questions" }) {
+/* Accordion FAQ + FAQPágina structured data for rich results. */
+export default function FAQ({ items, title = "Perguntas frequentes" }) {
   const [open, setOpen] = useState(0)
   const ld = {
     '@context': 'https://schema.org',

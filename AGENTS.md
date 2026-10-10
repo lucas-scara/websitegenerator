@@ -12,7 +12,7 @@ MVP Brasil em **T0 + 24 horas de janela de execução**: descobrir empresas com 
 
 1. **GitHub:** nunca commitar diretamente na `main`, fazer merge na `main` ou force-push. Trabalhar em branch (sugestão: `feat/br-mvp`), commitar e abrir PR; **merge exclusivo de Lucas**.
 2. **Autoria:** e-mail de commit exigido: `lucasscaranello@gmail.com`; nome: `Lucas Scaranello`. Verificar a identidade REAL registrada pelo mecanismo Git. Se a integração não permitir configurar autor/e-mail, parar e comunicar — não presumir autoria.
-3. **Identidade:** responsável é Lucas Scaranello; a **assinatura comercial aprovada é `scarasoft — Lucas Scaranello`**. E-mail de contato e telefone/WhatsApp comerciais devem vir de configuração autorizada, ainda pendente. **Não usar** Albert Shiney, `albert@shiney.ai` nem `albertshineys-projects` em novas execuções. Não confundir e-mail de commit com contato comercial.
+3. **Identidade:** responsável é Lucas Scaranello; a **assinatura comercial aprovada é `scarasoft — Lucas Scaranello`**. E-mail de contato e telefone/WhatsApp comerciais foram informados por Lucas e ficam na configuração local `.env`, fora do Git. **Não usar** Albert Shiney, `albert@shiney.ai` nem `albertshineys-projects` em novas execuções. Não confundir e-mail de commit com contato comercial.
 4. **Sem segredos no Git:** `.env`, tokens, dados reais de prospecção, evidências e histórico ficam locais/privados; repositório pode permanecer público. Não despejar segredos em prompts, logs ou previews.
 5. **Envio externo:** instruções herdadas de consentimento de Albert **não valem** para o proprietário do fork. Enquanto o modo Brasil não estiver configurado e o lote não for autorizado explicitamente: **dry-run, sem submit**. Uma autorização deve delimitar segmento/cidade/volume; para lote autorizado, manter envio autônomo de **uma única tentativa por empresa**. Respeitar opt-outs e CAPTCHAs. Resultado incerto **não é retry**; registrar e escalar.
 6. **Fallback:** quando não houver formulário apropriado, registrar e-mail/telefone **publicamente divulgados**, URL de origem, motivo e mensagem preparada; nunca marcar como enviada.
@@ -50,3 +50,10 @@ MVP Brasil em **T0 + 24 horas de janela de execução**: descobrir empresas com 
 Aceite = evidências de empresas reais prospectadas, duas observações visuais por empresa qualificada, fatos e contatos verificados, site pt-BR gerado, preview público funcional, **um envio real observado no lote autorizado ou fallback registrado**, proteção contra duplicidade, testes relevantes e PR pronto para revisão. Se não houver formulário elegível, **não forçar envio**; demonstrar mecanismo com teste controlado e informar a limitação. Não prometer conversões comerciais em 24h.
 
 Em cada atualização, informar: etapa efetivamente testada, link/evidência quando disponível, bloqueios reais, arquivos alterados e trabalho pendente. Nunca afirmar que agentes continuam operando em background sem mecanismo verificável.
+
+## Decisões posteriores do proprietário
+
+- Cidade-alvo do piloto: **Bauru, São Paulo**. O operador informa a cidade no formulário do lote; ela não é fixa no código.
+- Contatos comerciais: configurados no `.env` local, sem versionar os valores. A autorização do lote para envio real ainda é necessária.
+- Chave Firecrawl configurada localmente; a consulta de uso autenticou com 1.036 créditos restantes. Nenhuma empresa foi raspada durante essa checagem.
+- Lucas autorizou remover o projeto fictício de demonstração da Vercel e operar localmente. A prévia local não fornece URL pública para mensagem comercial; resolver a publicação antes de contato real com link.

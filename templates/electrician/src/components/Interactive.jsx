@@ -5,9 +5,9 @@ import { useEffect, useState } from 'react'
 ---------------------------------------------------------------- */
 export function InstallShuffler() {
   const items = [
-    { tag: "Lighting", label: "Installation of lighting and power sockets", meta: '230 V' },
-    { tag: "Appliances", label: "Connecting household appliances", meta: '16 A' },
-    { tag: "Upgrades", label: "Upgrading existing installations", meta: '3-faset' },
+    { tag: "Iluminação", label: "Instalação de iluminação e tomadas", meta: 'Exemplo' },
+    { tag: "Eletrodomésticos", label: "Ligação de eletrodomésticos", meta: 'Exemplo' },
+    { tag: "Atualizações", label: "Atualização de instalações", meta: 'Exemplo' },
   ]
   const [stack, setStack] = useState(items)
   useEffect(() => {
@@ -50,10 +50,10 @@ export function InstallShuffler() {
 ---------------------------------------------------------------- */
 export function SparkWatch() {
   const statuses = [
-    { text: "Stable load · all OK", label: "Stable", tone: 'emerald' },
-    { text: "Earth leakage · RCD tripped", label: "Emergency", tone: 'accent' },
-    { text: "Electrician on the way · 12 min", label: "Response", tone: 'primary' },
-    { text: "Fault repaired · power restored", label: "Complete", tone: 'emerald' },
+    { text: "Circuito estável · ilustração", label: "Estável", tone: 'emerald' },
+    { text: "Falha de proteção · ilustração", label: "Atenção", tone: 'accent' },
+    { text: "Etapa de avaliação · ilustração", label: "Andamento", tone: 'primary' },
+    { text: "Verificação concluída · ilustração", label: "Concluído", tone: 'emerald' },
   ]
   const [idx, setIdx] = useState(0)
   const [count, setCount] = useState(7)
@@ -61,7 +61,7 @@ export function SparkWatch() {
     const id = setInterval(() => {
       setIdx((i) => {
         const n = (i + 1) % statuses.length
-        if (statuses[n].label === "Complete") setCount((c) => c + 1)
+        if (statuses[n].label === "Concluído") setCount((c) => c + 1)
         return n
       })
     }, 2300)
@@ -100,11 +100,11 @@ export function SparkWatch() {
           <svg className="h-3.5 w-3.5 text-primary-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M13 2 4 14h7l-2 8 11-12h-7l0-8z" />
           </svg>
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary-dark">{"Fault finding"}</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary-dark">{"Avaliação de falhas"}</span>
         </div>
         <div className="flex items-baseline gap-1">
           <span className="font-display font-bold text-sm text-ink tabular-nums">{String(count).padStart(2, '0')}</span>
-          <span className="font-mono text-[9px] uppercase tracking-widest text-muted">{"today"}</span>
+          <span className="font-mono text-[9px] uppercase tracking-widest text-muted">{"exemplo"}</span>
         </div>
       </div>
 
@@ -196,7 +196,7 @@ export function SparkWatch() {
    Card 3 — Cursor scheduler (book a visit)
 ---------------------------------------------------------------- */
 export function BookingScheduler() {
-  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+  const days = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D']
   const [step, setStep] = useState(0)
   const activeDay = 2
   useEffect(() => {
@@ -216,8 +216,8 @@ export function BookingScheduler() {
   return (
     <div className="relative h-44 w-full bg-white border border-divider rounded-3xl p-5 overflow-hidden">
       <div className="flex items-center justify-between mb-3">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">{"Plan ahead"}</span>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-primary-dark bg-primary/10 px-2 py-0.5 rounded-full">Planning</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">{"Planeje antes"}</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-primary-dark bg-primary/10 px-2 py-0.5 rounded-full">Ilustração</span>
       </div>
       <div className="grid grid-cols-7 gap-2 mb-4">
         {days.map((d, i) => (
@@ -239,7 +239,7 @@ export function BookingScheduler() {
           step === 4 ? 'bg-accent text-deep scale-[1.02] shadow-md shadow-accent/30' : 'bg-divider/40 text-muted'
         }`}
       >
-        {step >= 3 ? "Discuss your preferred day" : "Planning illustration"}
+        {step >= 3 ? "Converse sobre a data desejada" : "Ilustração de planejamento"}
       </button>
       <div
         className="absolute pointer-events-none transition-all duration-500 ease-out"

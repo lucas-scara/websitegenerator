@@ -1,6 +1,7 @@
 import concurrent.futures
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -12,9 +13,27 @@ control=importlib.util.module_from_spec(spec); spec.loader.exec_module(control)
 class LedgerTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.old=control.DB; control.DB=Path(self.tmp.name)/'test.db'
-        self.bid=control.batch('Plumbers','Boston')['id']
+        self.old_auth=control.OUTREACH_AUTH_FILE
+        control.OUTREACH_AUTH_FILE=Path(self.tmp.name)/'authorization.json'
+        self.old_email=os.environ.get('BR_COMMERCIAL_EMAIL'); self.old_phone=os.environ.get('BR_COMMERCIAL_PHONE')
+        os.environ['BR_COMMERCIAL_EMAIL']='contato@scarasoft.example'
+        os.environ['BR_COMMERCIAL_PHONE']='+55 11 90000-0000'
+        self.bid=control.batch('Plumbers','Boston',5)['id']
+        self.authorize()
     def tearDown(self):
-        control.DB=self.old; self.tmp.cleanup()
+        control.DB=self.old; control.OUTREACH_AUTH_FILE=self.old_auth
+        for key, old in [('BR_COMMERCIAL_EMAIL', self.old_email), ('BR_COMMERCIAL_PHONE', self.old_phone)]:
+            if old is None: os.environ.pop(key, None)
+            else: os.environ[key]=old
+        self.tmp.cleanup()
+    def authorize(self, max_contacts=5):
+        with control.connect() as c:
+            batch=c.execute('SELECT * FROM batches WHERE id=?',(self.bid,)).fetchone()
+        control.OUTREACH_AUTH_FILE.write_text(json.dumps({'mode':'live','approved_by':'Lucas Scaranello',
+            'batch_id':self.bid,'industry':batch['industry'],'city':batch['city'],
+            'max_contacts':min(max_contacts,batch['requested_count'])}))
+    def message(self, body='Olá'):
+        return body+'\nhttps://preview.example\ncontato@scarasoft.example\n+55 11 90000-0000\nscarasoft — Lucas Scaranello'
     def add(self,n=0): return control.add(self.bid,f'Business {n}',f'https://business{n}.example')['id']
     def ready(self):
         jid=self.add(); control.claim(self.bid,'worker')
@@ -44,7 +63,46 @@ class LedgerTests(unittest.TestCase):
     def test_contact_requires_qualification(self):
         jid=self.ready()
         control.update(jid,'worker',fields={'qualification':{}})
-        with self.assertRaises(ValueError): control.contact_begin(jid,'worker','Hello','https://business0.example/contact')
+        with self.assertRaises(ValueError): control.contact_begin(jid,'worker',self.message(),'https://business0.example/contact')
+    def test_clear_all_refuses_durable_ledger(self):
+        disposable=control.DB
+        control.DB=control.ROOT/'data/revamp.sqlite3'
+        try:
+            with self.assertRaisesRegex(ValueError, 'disabled'):
+                control.clear_all('unsafe reset')
+        finally:
+            control.DB=disposable
+    def test_contact_is_disabled_without_exact_batch_authorization(self):
+        jid=self.ready()
+        control.OUTREACH_AUTH_FILE.unlink()
+        with self.assertRaisesRegex(ValueError, 'disabled'):
+            control.contact_begin(jid,'worker',self.message(),'https://business0.example/contact')
+        self.assertEqual(control.snapshot()['jobs'][0]['stage'],'ready')
+        self.authorize()
+        auth=json.loads(control.OUTREACH_AUTH_FILE.read_text()); auth['city']='Outra cidade'
+        control.OUTREACH_AUTH_FILE.write_text(json.dumps(auth))
+        with self.assertRaisesRegex(ValueError, 'scope'):
+            control.contact_begin(jid,'worker',self.message(),'https://business0.example/contact')
+        self.assertEqual(control.snapshot()['jobs'][0]['stage'],'ready')
+    def test_contact_simulation_records_draft_without_submission(self):
+        jid=self.ready()
+        control.OUTREACH_AUTH_FILE.unlink()
+        result=control.contact_simulate(jid,'worker',self.message(),'https://business0.example/contact')
+        self.assertEqual(result['stage'],'simulated')
+        with control.connect() as c:
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM submissions').fetchone()[0],0)
+        job=control.snapshot()['jobs'][0]
+        self.assertEqual(job['contact_status'],'simulated')
+        self.assertEqual(job['data']['contact_simulation']['form_url'],'https://business0.example/contact')
+        self.assertEqual(control.snapshot()['workers'][0]['status'],'idle')
+        with self.assertRaises(ValueError): control.contact_begin(jid,'worker',self.message(),'https://business0.example/contact')
+        with self.assertRaisesRegex(ValueError, 'disabled'): control.resume_simulated(jid,'worker-2')
+        self.authorize()
+        resumed=control.resume_simulated(jid,'worker-2')
+        self.assertEqual(resumed['stage'],'ready')
+        control.contact_begin(jid,'worker-2',self.message(),'https://business0.example/contact')
+        with control.connect() as c:
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM submissions').fetchone()[0],1)
     def test_parallel_claims_unique_and_capacity(self):
         ids={self.add(n) for n in range(5)}
         def claim(i):
@@ -61,12 +119,12 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaises(ValueError): control.update(jid,'worker','deploying')
     def test_single_contact_attempt_and_uncertainty(self):
         jid=self.ready()
-        with self.assertRaises(ValueError): control.contact_begin(jid,'worker','Hello','https://unrelated.example/contact')
-        control.contact_begin(jid,'worker','Hello','https://business0.example/contact')
-        with self.assertRaises(ValueError): control.contact_begin(jid,'worker','Hello again','https://business0.example/contact')
+        with self.assertRaises(ValueError): control.contact_begin(jid,'worker',self.message(),'https://unrelated.example/contact')
+        control.contact_begin(jid,'worker',self.message(),'https://business0.example/contact')
+        with self.assertRaises(ValueError): control.contact_begin(jid,'worker',self.message('Olá novamente'),'https://business0.example/contact')
         control.contact_finish(jid,'worker','uncertain','Browser timed out after submit')
         with self.assertRaises(ValueError): control.update(jid,'worker','ready')
-        with self.assertRaises(ValueError): control.contact_begin(jid,'worker','Retry','https://business0.example/contact')
+        with self.assertRaises(ValueError): control.contact_begin(jid,'worker',self.message('Retry'),'https://business0.example/contact')
         self.assertEqual(control.snapshot()['workers'][0]['status'],'idle')
     def test_batch_limit_and_skipped_replacement(self):
         for n in range(5): self.add(n)
@@ -99,7 +157,7 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual((batch['manual_count'],batch['completed_count'],batch['active_count'],batch['available_count']),(1,0,0,1))
         with self.assertRaises(ValueError): control.batch_status(self.bid,'complete')
         self.add(1)
-        with self.assertRaises(ValueError): control.contact_begin(jid,'worker','Retry','https://business0.example')
+        with self.assertRaises(ValueError): control.contact_begin(jid,'worker',self.message('Retry'),'https://business0.example')
         control.cancel_batch(self.bid,'Stop')
         self.assertEqual(next(j for j in control.snapshot()['jobs'] if j['id']==jid)['stage'],'manual')
     def test_manual_rejects_unbuilt_or_reserved_jobs(self):
@@ -112,7 +170,8 @@ class LedgerTests(unittest.TestCase):
             c.execute('DELETE FROM identities'); c.execute('DELETE FROM jobs'); c.execute('DELETE FROM workers')
         jid=self.ready()
         with self.assertRaises(ValueError): control.manual_outreach(jid,'worker','No form','Missing preview URL')
-        control.contact_begin(jid,'worker','https://preview.example','https://business0.example/contact')
+        self.authorize()
+        control.contact_begin(jid,'worker',self.message('https://preview.example'),'https://business0.example/contact')
         with self.assertRaises(ValueError): control.manual_outreach(jid,'worker','CAPTCHA','https://preview.example')
     def test_failed_outcomes_allow_replacements_without_counting_completion(self):
         for outcome in ('skipped', 'blocked', 'uncertain'):
@@ -136,7 +195,8 @@ class LedgerTests(unittest.TestCase):
         jid=self.ready()
         with self.assertRaises(ValueError): control.batch_status(self.bid,'complete')
         with self.assertRaises(ValueError): self.add(1)
-        control.contact_begin(jid,'worker','Hello','https://business0.example/contact')
+        self.authorize()
+        control.contact_begin(jid,'worker',self.message(),'https://business0.example/contact')
         control.contact_finish(jid,'worker','submitted','Clicked submit once')
         result=control.batch_status(self.bid,'complete')
         self.assertEqual(result['completed_count'],1)

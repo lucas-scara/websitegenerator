@@ -12,39 +12,39 @@ import ContactSection from '../components/ContactSection.jsx'
 import Reviews from '../components/Reviews.jsx'
 
 const ALL = [
-  { Icon: Siren, label: "Electrical repairs", href: '/electrical-repairs', text: "Discuss your electrical needs with us. We can talk through the work, timing and quotation for your property." },
-  { Icon: Plug, label: "Electrical installation", href: '/electrical-installation', text: "Lighting, electrical outlets, household appliances and upgrading of installations." },
-  { Icon: ShieldAlert, label: "RCD safety switch", href: '/rcd-protection', text: "Safety device that switches off the current in case of malfunction of the installation." },
-  { Icon: Box, label: "Electrical enclosure installation", href: '/electrical-enclosures', text: "Safe and correct solution for your home or building." },
-  { Icon: Zap, label: "Consumer unit replacement", href: '/consumer-units', text: "New consumer unit that matches today's needs and current requirements." },
-  { Icon: Hammer, label: "Electrical renovation", href: '/rewiring', text: "From old to new - when the installations no longer match the need." },
-  { Icon: Layers, label: "Electrical contracting", href: '/electrical-contracting', text: "Planning, coordination and implementation in major projects." },
-  { Icon: HousePlus, label: "Extensions", href: '/extensions', text: "Correct and secure electrical installations in new rooms and extensions." },
-  { Icon: LayoutGrid, label: "Full renovation", href: '/renovations', text: "Electrical work at all phases of a total renovation of housing." },
-  { Icon: Wrench, label: "Electrical maintenance", href: '/maintenance', text: "Stable electricity in everyday life - executed correctly from the start." },
-  { Icon: BatteryCharging, label: "EV charger", href: '/ev-charging', text: "Discuss charging options for your property." },
+  { Icon: Siren, label: "Reparos elétricos", href: '/electrical-repairs', text: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
+  { Icon: Plug, label: "Instalações elétricas", href: '/electrical-installation', text: "Iluminação, tomadas e atualização de instalações elétricas." },
+  { Icon: ShieldAlert, label: "Dispositivo DR", href: '/rcd-protection', text: "Dispositivo de proteção para situações de falha elétrica." },
+  { Icon: Box, label: "Instalação de quadro elétrico", href: '/electrical-enclosures', text: "Soluções para o quadro elétrico da sua casa ou empresa." },
+  { Icon: Zap, label: "Troca de quadro elétrico", href: '/consumer-units', text: "Atualização do quadro elétrico conforme as necessidades do imóvel." },
+  { Icon: Hammer, label: "Reforma elétrica", href: '/rewiring', text: "Atualização de instalações que já não atendem às necessidades do imóvel." },
+  { Icon: Layers, label: "Projetos elétricos", href: '/electrical-contracting', text: "Planejamento e execução de serviços elétricos para projetos maiores." },
+  { Icon: HousePlus, label: "Ampliações", href: '/extensions', text: "Instalações elétricas para novos cômodos e ampliações." },
+  { Icon: LayoutGrid, label: "Reforma completa", href: '/renovations', text: "Serviços elétricos nas etapas de uma reforma residencial." },
+  { Icon: Wrench, label: "Manutenção elétrica", href: '/maintenance', text: "Manutenção e verificação da instalação elétrica." },
+  { Icon: BatteryCharging, label: "Carregador para veículo elétrico", href: '/ev-charging', text: "Converse sobre opções de recarga para seu imóvel." },
 ]
 
 export default function ServicesPage() {
   useSEO({
-    title: copy("Explore our craftsmanship | Your Company"),
-    description: "Discuss your electrical needs with us. We can talk through the work, timing and quotation for your property.",
+    title: copy("Conheça os serviços | Your Company"),
+    description: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.",
     path: '/services',
     image: asset("/images/panel-testing.jpg"),
   })
   const segments = [
-    { Icon: Building2, title: "Housing associations", text: "Discuss your electrical needs with us. We can talk through the work, timing and quotation for your property." },
-    { Icon: Home, title: "Homeowners", text: "Discuss your electrical needs with us. We can talk through the work, timing and quotation for your property." },
+    { Icon: Building2, title: "Condomínios", text: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
+    { Icon: Home, title: "Proprietários", text: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
   ]
   return (
     <>
       <PageHero
         image={asset("/images/panel-testing.jpg")}
-        imageAlt={copy("Your Company — explore our craftsmanship")}
-        crumbs={[{ label: "Home", href: '/' }, { label: "Services", href: '/services' }]}
-        eyebrow={"Electrical services"}
-        h1={"Explore our craftsmanship"}
-        intro={["Our attention to detail and craftsmanship is expressed in every project we carry out. From installation of lighting to replacement of entire electrical installations."]}
+        imageAlt={copy("Your Company — conheça os serviços")}
+        crumbs={[{ label: "Início", href: '/' }, { label: "Serviços", href: '/services' }]}
+        eyebrow={"Serviços elétricos"}
+        h1={"Conheça os serviços"}
+        intro={["Conheça os serviços elétricos apresentados nesta prévia e converse sobre o que seu imóvel precisa."]}
       />
 
       <section className="px-6 sm:px-10 lg:px-16 pt-20 sm:pt-28 pb-8">
@@ -63,7 +63,7 @@ export default function ServicesPage() {
 
       <section className="px-6 sm:px-10 lg:px-16 py-16 sm:py-24">
         <div className="max-w-7xl mx-auto">
-          <SectionHeading eyebrow={"Our services"} title={"All your electrical needs,"} flourish={"under one roof."} className="mb-12" />
+          <SectionHeading eyebrow={"Nossos serviços"} title={"Soluções elétricas,"} flourish={"em um só lugar."} className="mb-12" />
           <ServicesGrid items={HOME_SERVICES} />
           <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-divider rounded-4xl overflow-hidden border border-divider">
             {ALL.map((s, i) => (

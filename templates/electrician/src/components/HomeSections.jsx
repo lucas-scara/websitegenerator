@@ -32,9 +32,9 @@ export function TrustBar() {
           })}
         </div>
         <div className="mt-4 pt-4 border-t border-divider flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <p className="text-sm text-ink font-medium">{"The job done properly, with the right solutions."}</p>
+          <p className="text-sm text-ink font-medium">{"Converse sobre a solução adequada para seu imóvel."}</p>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-muted hidden md:inline">{"Thoughtful solutions for everyday electrical needs."}</span>
+            <span className="text-xs text-muted hidden md:inline">{"Soluções para necessidades elétricas do dia a dia."}</span>
             {BADGES.map((b) => <img key={b.src} src={b.src} alt={b.alt} className="h-5 w-auto object-contain" />)}
           </div>
         </div>
@@ -50,9 +50,9 @@ export function Pillars() {
   const ref = useRef(null)
 
   const pillars = [
-    { n: '01', title: "Experience", target: 'Care', suffix: '', label: "in every detail", desc: "Discuss your electrical needs with us. We can talk through the work, timing and quotation for your property." },
-    { n: '02', title: "Reviews", target: 'Trust', suffix: '', label: "built through service", desc: "Discuss your electrical needs with us. We can talk through the work, timing and quotation for your property." },
-    { n: '03', title: "Fault finding", target: 'Here', suffix: '', label: "when you need us", desc: "Discuss your electrical needs with us. We can talk through the work, timing and quotation for your property." },
+    { n: '01', title: "Experiência", target: 'Cuidado', suffix: '', label: "em cada detalhe", desc: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
+    { n: '02', title: "Atendimento", target: 'Confiança', suffix: '', label: "construída no atendimento", desc: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
+    { n: '03', title: "Avaliação de falhas", target: 'Aqui', suffix: '', label: "para conversar", desc: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel." },
   ]
 
   return (
@@ -62,8 +62,8 @@ export function Pillars() {
       <div className="absolute bottom-0 right-0 h-72 w-72 rounded-full bg-accent/10 blur-3xl pointer-events-none" />
       <div className="relative max-w-7xl mx-auto">
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 mb-14 sm:mb-20">
-          <SectionHeading eyebrow={"Our approach"} title={"An electrician you can"} flourish={"rely on."} />
-          <Reveal delay={120}><p className="text-muted text-lg leading-relaxed max-w-md lg:text-right">{"Care, trust and support at every step."}</p></Reveal>
+          <SectionHeading eyebrow={"Nossa abordagem"} title={"Um eletricista em quem você pode"} flourish={"confiar."} />
+          <Reveal delay={120}><p className="text-muted text-lg leading-relaxed max-w-md lg:text-right">{"Atenção e diálogo em cada etapa."}</p></Reveal>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-divider rounded-5xl overflow-hidden border border-divider shadow-xl shadow-primary/5">
           {pillars.map((p, i) => (
@@ -119,26 +119,26 @@ export function Protocol() {
 
   const steps = [
     {
-      num: '01', title: "Advice", tagline: "We listen first.", meta: "Step 1 / Consultation",
-      text: "Good cooperation starts with good dialogue. We take the time to understand your wishes and advise you so that you get a solution that suits your needs - with transparent offers and without hidden fees.",
-      image: asset("/images/pendant.jpg"), alt: "Interior lighting inspiration — stock photograph",
+      num: '01', title: "Orientação", tagline: "Começamos ouvindo.", meta: "Etapa 1 / Conversa",
+      text: "Uma boa conversa ajuda a definir as necessidades, o escopo e as condições do serviço antes de contratar.",
+      image: asset("/images/pendant.jpg"), alt: "Iluminação de interior — imagem ilustrativa",
     },
     {
-      num: '02', title: "Installation", tagline: "Right from the start.", meta: "Electrical services",
-      text: "Discuss your electrical needs with us. We can talk through the work, timing and quotation for your property.",
-      image: asset("/images/panel-testing.jpg"), alt: "Electrical panel testing — stock photograph",
+      num: '02', title: "Instalação", tagline: "Desde o início.", meta: "Serviços elétricos",
+      text: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.",
+      image: asset("/images/panel-testing.jpg"), alt: "Quadro elétrico — imagem ilustrativa",
     },
     {
-      num: '03', title: "Documentation", tagline: "Ready for the next step.", meta: "Step 3 / Quality checks & handover",
-      text: "Discuss your electrical needs with us. We can talk through the work, timing and quotation for your property.",
-      image: asset("/images/outdoor-lighting.jpg"), alt: "Exterior lighting — stock photograph",
+      num: '03', title: "Documentação", tagline: "Pronto para o próximo passo.", meta: "Etapa 3 / Verificações e entrega",
+      text: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.",
+      image: asset("/images/outdoor-lighting.jpg"), alt: "Iluminação externa — imagem ilustrativa",
     },
   ]
 
   return (
     <section id="proces" ref={ref} className="relative px-4 sm:px-6 py-20">
       <div className="max-w-7xl mx-auto mb-14 px-2 sm:px-10">
-        <SectionHeading eyebrow={"How we work"} title={"Three steps."} flourish={"No surprises."} />
+        <SectionHeading eyebrow={"Como trabalhamos"} title={"Três etapas."} flourish={"Com clareza."} />
       </div>
       <div className="space-y-8">
         {steps.map((s) => (
@@ -161,7 +161,7 @@ export function Protocol() {
                 <div className="absolute inset-0 bg-gradient-to-t from-deep/60 via-transparent to-deep/15" />
                 <div className="absolute top-5 left-5 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-full pl-3 pr-4 py-1.5 shadow-lg">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-ink">{"Step "}{s.num}</span>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-ink">{"Etapa "}{s.num}</span>
                 </div>
                 <div className="absolute bottom-4 right-4 font-mono text-[10px] uppercase tracking-widest text-white/70">{s.num} / {SITE.name}</div>
               </div>
@@ -179,8 +179,8 @@ export function Protocol() {
 export function TrustSignals() {
   return <section className="py-16 px-6 sm:px-10 lg:px-16">
     <div className="max-w-6xl mx-auto rounded-4xl border border-divider p-10 text-center">
-      <h2 className="font-display font-bold text-3xl">Let’s talk about your project</h2>
-      <p className="text-muted mt-4">Talk to us about your property, your plans and the electrical work you need.</p>
+      <h2 className="font-display font-bold text-3xl">Vamos conversar sobre seu projeto</h2>
+      <p className="text-muted mt-4">Converse sobre seu imóvel, seus planos e o serviço elétrico necessário.</p>
     </div>
   </section>
 }

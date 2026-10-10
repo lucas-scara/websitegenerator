@@ -9,39 +9,39 @@ import ContactSection from '../components/ContactSection.jsx'
 
 export default function ContactPage() {
   useSEO({
-    title: copy("Contact | Your Company"),
-    description: "Do you have questions, need help, or maybe you want to get more information about our services? Whatever your request is about, you can easily write to us directly here. We make sure to return to you as soon as possible, as we take pride in answering all queries effectively and thoroughly. Should you need a quick clarification, you are of course also welcome to contact us directly on the phone - we are here to help you!",
+    title: copy("Contato | Your Company"),
+    description: "Tem dúvidas sobre nossos serviços? Entre em contato por telefone ou e-mail para conversar sobre seu projeto.",
     path: '/contact',
     image: asset("/images/house-dusk.jpg"),
   })
   const details = [
     { Icon: Building2, label: copy("Your Company"), value: SITE.address },
-    { Icon: Phone, label: "Phone:", value: SITE.phone, href: SITE.phoneHref },
+    { Icon: Phone, label: "Telefone:", value: SITE.phone, href: SITE.phoneHref },
     { Icon: Mail, label: 'E-mail:', value: SITE.email, href: SITE.emailHref },
-    { Icon: Hash, label: "Company registration:", value: SITE.cvr },
-    { Icon: FileBadge2, label: "Electrical services", value: SITE.authNumber },
-    { Icon: Hash, label: "EAN number:", value: SITE.ean },
+    { Icon: Hash, label: "Cadastro da empresa:", value: SITE.cvr },
+    { Icon: FileBadge2, label: "Serviços elétricos", value: SITE.authNumber },
+    { Icon: Hash, label: "Identificação:", value: SITE.ean },
   ]
   return (
     <>
       <PageHero
         image={asset("/images/house-dusk.jpg")}
-        imageAlt={"Modern interior — illustrative stock photograph"}
-        crumbs={[{ label: "Home", href: '/' }, { label: "Contact", href: '/contact' }]}
-        eyebrow={"Contact · we are here to help"}
-        h1={"Contact"}
+        imageAlt={"Interior moderno — imagem ilustrativa"}
+        crumbs={[{ label: "Início", href: '/' }, { label: "Contato", href: '/contact' }]}
+        eyebrow={"Contato · vamos conversar"}
+        h1={"Contato"}
         intro={[
-          "Do you have questions, need help, or maybe you want to get more information about our services? Whatever your request is about, you can easily write to us directly here. We make sure to return to you as soon as possible, as we take pride in answering all queries effectively and thoroughly.",
-          "Should you need a quick clarification, you are of course also welcome to contact us directly on the phone - we are here to help you!",
+          "Tem dúvidas sobre nossos serviços? Entre em contato para conversar sobre seu projeto.",
+          "Se preferir, ligue para esclarecer suas dúvidas.",
         ]}
-        ctas={[{ label: SITE.phone, href: SITE.phoneHref }, { label: "Email us", href: SITE.emailHref }]}
+        ctas={[{ label: SITE.phone, href: SITE.phoneHref }, { label: "Envie um e-mail", href: SITE.emailHref }]}
       />
 
       <section className="px-6 sm:px-10 lg:px-16 pt-16 sm:pt-24 pb-6">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-12 gap-8">
           <Reveal className="lg:col-span-5">
             <div className="h-full rounded-5xl bg-white border border-divider p-6 sm:p-8 shadow-xl shadow-primary/5">
-              <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-primary-dark">{"╱ Company details"}</span>
+              <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-primary-dark">{"╱ Dados da empresa"}</span>
               <ul className="mt-5 divide-y divide-divider">
                 {details.filter(d => d.value).map((d) => (
                   <li key={d.label + d.value} className="py-3.5 flex items-start gap-3">
@@ -57,7 +57,7 @@ export default function ContactPage() {
           </Reveal>
           <Reveal delay={120} className="lg:col-span-7">
             <div className="h-full min-h-[380px] rounded-5xl overflow-hidden border border-divider shadow-xl shadow-primary/5 bg-white relative">
-              <div className="p-12 text-muted">Contact us to confirm service coverage.</div>
+              <div className="p-12 text-muted">Entre em contato para confirmar a área atendida.</div>
               <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-full pl-3 pr-4 py-1.5 shadow-lg text-deep">
                 <MapPin className="h-3.5 w-3.5 text-primary" />
                 <span className="font-mono text-[10px] uppercase tracking-widest">{SITE.address}</span>
