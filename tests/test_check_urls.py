@@ -42,6 +42,7 @@ class URLTests(unittest.TestCase):
                 return {'content': '', 'content_type': 'text/html', 'final': 'https://example.com/', 'http_status': code}
             result = check.verify('https://example.com', 'Empresa Teste', probe=probe)
             self.assertEqual(result['motivo'], f'http_{code}')
+            self.assertEqual(result['http_status'], code)
             self.assertEqual(len(calls), 2 if code == 503 else 1)
         for exception, reason in ((socket.timeout(), 'timeout'), (socket.gaierror(), 'erro_dns'),
                                   (ssl.SSLError(), 'erro_tls')):
@@ -54,6 +55,19 @@ class URLTests(unittest.TestCase):
         self.assertEqual(check.verify('https://user:password@example.com', 'Empresa')['motivo'], 'url_invalida')
         with patch.object(check, 'fetch', side_effect=ValueError('Response exceeds byte limit')):
             self.assertEqual(check.probe_direct('https://example.com', 8, 1024, 4)['error'], 'limite_bytes')
+        with patch.object(check, 'fetch', side_effect=site_assets.ResponseLimitError(200, 'https://example.com/')):
+            limited = check.verify('https://example.com/', 'Oficina Atlas', retries=0, probe=check.probe_direct)
+        self.assertEqual((limited['status_url'], limited['motivo'], limited['http_status'], limited['encaminhamento']),
+                         ('acessivel_inconclusiva', 'limite_bytes', 200, 'revisao_pendente'))
+
+    def test_abbreviated_name_and_generic_words(self):
+        shortened = '<html><title>Chaveiro Especialista</title><body>Chaveiro Especialista atende Bauru com serviços automotivos.</body></html>'
+        self.assertEqual(check.classify_html(shortened, 'Chaveiro Especialista Automotivo de Bauru')[0], 'confirmada')
+        generic = '<html><title>Chaveiro Bauru</title><body>Somos um chaveiro em Bauru para todas as pessoas.</body></html>'
+        self.assertEqual(check.classify_html(generic, 'Chaveiro Especialista Automotivo de Bauru')[0], 'acessivel_inconclusiva')
+        self.assertEqual(check.classify_html(generic, 'Chaveiro Bauru')[0], 'acessivel_inconclusiva')
+        self.assertEqual(check.classify_html('<html><body>Outra empresa em Bauru com serviços diversos.</body></html>',
+                                             'Oficina Atlas')[0], 'acessivel_inconclusiva')
 
     def test_batch_preserves_columns_and_failure_isolation(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -62,8 +76,8 @@ class URLTests(unittest.TestCase):
                 writer = csv.DictWriter(handle, fieldnames=['id', 'empresa', 'site_identificado', 'notas'])
                 writer.writeheader()
                 writer.writerows([
-                    {'id': '1', 'empresa': 'Empresa Um', 'site_identificado': 'https://example.com/', 'notas': 'operator note'},
-                    {'id': '2', 'empresa': 'Empresa Um', 'site_identificado': 'https://example.com/', 'notas': 'duplicate'},
+                    {'id': '1', 'empresa': 'Oficina Atlas', 'site_identificado': 'https://example.com/', 'notas': 'operator note'},
+                    {'id': '2', 'empresa': 'Oficina Atlas', 'site_identificado': 'https://example.com/', 'notas': 'duplicate'},
                     {'id': '3', 'empresa': 'Empresa Dois', 'site_identificado': 'https://fail.example/', 'notas': 'keep'},
                     {'id': '4', 'empresa': 'Sem Site', 'site_identificado': '', 'notas': 'keep'}])
             calls = []
@@ -71,7 +85,7 @@ class URLTests(unittest.TestCase):
                 calls.append(url)
                 if 'fail' in url:
                     return {'error': 'erro_dns'}
-                return {'content': '<html><body>Empresa Um atende toda a cidade.</body></html>',
+                return {'content': '<html><body>Oficina Atlas atende toda a cidade.</body></html>',
                         'content_type': 'text/html', 'final': url, 'http_status': 200}
             args = argparse.Namespace(input=str(src), output=str(out), report=str(report), name_column=None,
                                       url_column=None, id_column=None, workers=5, timeout=8, byte_limit=1024,

@@ -7,16 +7,17 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 import json
 from pathlib import Path
-import re
 import socket
 import ssl
 import subprocess
 import sys
 import time
-import unicodedata
 from urllib.parse import urlsplit, urlunsplit
 
 from site_assets import clean_url, fetch, ResponseLimitError
+from digital_presence import (SIGNALS, SIGNAL_FIELDS, classify_search,
+                              normalized, prepared_queries, prior_scout_observation,
+                              strong_name_match)
 
 NAME_COLUMNS = ('empresa', 'nome_empresa', 'nome', 'business_name', 'name')
 URL_COLUMNS = ('site_identificado', 'url_candidata', 'site', 'website', 'url', 'site_url')
@@ -25,8 +26,10 @@ EXTRA_COLUMNS = ('url_original', 'url_final', 'status_url', 'http_status', 'moti
                  'identidade_correspondente', 'evidencia_resumida', 'verificado_em',
                  'tentativas', 'tempo_ms', 'encaminhamento', 'google_business_observado',
                  'presenca_social_observada', 'presenca_diretorio_observada',
-                 'fonte_sinal', 'revisao_humana', 'reutilizado')
-SIGNALS = {'sim', 'nao_observado', 'nao_verificado'}
+                 'fonte_sinal', 'revisao_humana', 'reutilizado',
+                 'instagram_observado', 'facebook_observado', 'consulta_presenca',
+                 'data_pesquisa_presenca', 'status_pesquisa_presenca',
+                 'fonte_busca', 'referencias_busca', 'url_candidata_pendente')
 ROUTES = {'confirmada': 'auditoria_visual_futura',
           'acessivel_inconclusiva': 'revisao_pendente',
           'falha_tecnica': 'avaliar_site_inoperante',
@@ -38,28 +41,31 @@ PARKED = ('domain parked', 'parked domain', 'dominio estacionado', 'account susp
 TRANSIENT = {'timeout', 'erro_conexao', 'http_502', 'http_503', 'http_504'}
 
 
-def normalized(value):
-    value = unicodedata.normalize('NFKD', value.casefold())
-    return re.sub(r'[^a-z0-9]+', ' ', ''.join(c for c in value if not unicodedata.combining(c))).strip()
-
-
 class PageText(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.hidden = 0
         self.parts = []
+        self.brand_depth = 0
+        self.brand_parts = []
 
     def handle_starttag(self, tag, attrs):
         if tag in ('script', 'style', 'noscript', 'svg'):
             self.hidden += 1
+        if tag in ('title', 'h1'):
+            self.brand_depth += 1
 
     def handle_endtag(self, tag):
         if tag in ('script', 'style', 'noscript', 'svg') and self.hidden:
             self.hidden -= 1
+        if tag in ('title', 'h1') and self.brand_depth:
+            self.brand_depth -= 1
 
     def handle_data(self, data):
         if not self.hidden:
             self.parts.append(data)
+            if self.brand_depth:
+                self.brand_parts.append(data)
 
 
 def classify_html(content, company):
@@ -71,9 +77,12 @@ def classify_html(content, company):
     if len(text) < 20:
         return 'falha_tecnica', 'html_sem_conteudo', 'HTML sem texto utilizável'
     name = normalized(company)
-    if len(name) >= 5 and len(name.split()) >= 2 and f' {name} ' in f' {text} ':
+    if strong_name_match(company, text) and f' {name} ' in f' {text} ':
         return 'confirmada', 'nome_correspondente', 'Nome da empresa encontrado no texto HTML'
-    return 'acessivel_inconclusiva', 'identidade_nao_confirmada', 'HTML utilizável; nome completo não encontrado'
+    brand = ' '.join(parser.brand_parts)
+    if strong_name_match(company, brand) and ('bauru' not in name.split() or 'bauru' in text.split()):
+        return 'confirmada', 'nome_comercial_abreviado', 'Nome comercial forte em título ou cabeçalho HTML'
+    return 'acessivel_inconclusiva', 'identidade_nao_confirmada', 'HTML utilizável; identidade sem correspondência forte'
 
 
 def display_url(url):
@@ -177,7 +186,11 @@ def verify(url, company, *, timeout=8, byte_limit=262144, redirects=4,
                     continue
                 base['url_final'] = response.get('final', '')
                 base['http_status'] = code or ''
-                if error:
+                if error == 'limite_bytes' and code == 200:
+                    base.update(status_url='acessivel_inconclusiva', motivo='limite_bytes',
+                                identidade_correspondente='nao_verificada',
+                                evidencia_resumida='HTTP 200 com HTML acima do limite de leitura; identidade não verificada')
+                elif error:
                     base.update(status_url='falha_tecnica', motivo=error,
                                 identidade_correspondente='nao_verificada',
                                 evidencia_resumida=f'Falha técnica: {error}')
@@ -211,22 +224,36 @@ def run(args, probe=probe_subprocess):
     source = Path(args.input)
     output = Path(args.output)
     report = Path(args.report)
-    if source.resolve() in (output.resolve(), report.resolve()) or output.resolve() == report.resolve():
-        raise ValueError('Entrada, CSV de saída e JSON devem ter caminhos distintos')
+    inputs = [source] + ([Path(args.search_results)] if getattr(args, 'search_results', None) else [])
+    outputs = [output, report] + ([Path(args.search_plan)] if getattr(args, 'search_plan', None) else [])
+    if len({path.resolve() for path in inputs + outputs}) != len(inputs + outputs):
+        raise ValueError('Arquivos de entrada, saída, relatório e plano devem ter caminhos distintos')
     with source.open(newline='', encoding='utf-8-sig') as handle:
         reader = csv.DictReader(handle)
         fields = reader.fieldnames or []
         name_col = column(fields, args.name_column, NAME_COLUMNS, 'name')
         url_col = column(fields, args.url_column, URL_COLUMNS, 'url')
-        if args.id_column:
-            column(fields, args.id_column, ID_COLUMNS, 'id')
+        id_col = column(fields, args.id_column, ID_COLUMNS, 'id') if args.id_column else next((x for x in ID_COLUMNS if x in fields), None)
+        city_col = next((x for x in ('cidade', 'city') if x in fields), None)
         rows = list(reader)
+    search_records = {}
+    if getattr(args, 'search_results', None):
+        supplied = json.loads(Path(args.search_results).read_text(encoding='utf-8'))
+        records = supplied.get('empresas', []) if isinstance(supplied, dict) else supplied
+        if not isinstance(records, list):
+            raise ValueError('Resultados de busca devem ser uma lista de empresas')
+        for item in records:
+            if not isinstance(item, dict):
+                raise ValueError('Cada registro de busca deve ser um objeto')
+            key = str(item.get('id') or item.get('empresa') or '')
+            if key:
+                search_records[key] = item
     cache = {}
     reuse_hours = getattr(args, 'reuse_hours', 24)
     if reuse_hours and output.exists():
         with output.open(newline='', encoding='utf-8-sig') as handle:
             for old in csv.DictReader(handle):
-                if old.get('status_url') not in ('confirmada', 'acessivel_inconclusiva'):
+                if old.get('status_url') not in ('confirmada', 'acessivel_inconclusiva') or old.get('motivo') == 'limite_bytes':
                     continue
                 try:
                     age = (datetime.now(timezone.utc) - datetime.fromisoformat(old['verificado_em'])).total_seconds()
@@ -241,7 +268,7 @@ def run(args, probe=probe_subprocess):
                         key = raw
                     cache[(key, old.get(name_col) or '')] = old
     for row in rows:
-        for signal in ('google_business_observado', 'presenca_social_observada', 'presenca_diretorio_observada'):
+        for signal in SIGNAL_FIELDS:
             if row.get(signal) and row[signal] not in SIGNALS:
                 raise ValueError(f'Valor inválido em {signal}; use sim, nao_observado ou nao_verificado')
     started = time.monotonic()
@@ -284,10 +311,26 @@ def run(args, probe=probe_subprocess):
         result['url_original'] = display_url(row.get(url_col) or '')
         merged = dict(row)
         merged.update(result)
-        for signal in ('google_business_observado', 'presenca_social_observada', 'presenca_diretorio_observada'):
-            merged[signal] = row.get(signal) or 'nao_verificado'
-        merged['fonte_sinal'] = row.get('fonte_sinal') or ''
+        observation = {}
+        if not key:
+            search_key = str(row.get(id_col) or '') if id_col else ''
+            record = search_records.get(search_key) or search_records.get(row.get(name_col) or '')
+            if record:
+                observation = classify_search(record, row.get(name_col) or '', row.get(city_col) or '' if city_col else '')
+            elif getattr(args, 'use_existing_observations', False) and row.get('resultado_busca'):
+                observation = prior_scout_observation(row)
+        for signal in SIGNAL_FIELDS:
+            merged[signal] = row.get(signal) or observation.get(signal) or 'nao_verificado'
+        for field in ('consulta_presenca', 'data_pesquisa_presenca', 'status_pesquisa_presenca',
+                      'fonte_busca', 'referencias_busca', 'url_candidata_pendente'):
+            merged[field] = row.get(field) or observation.get(field) or ''
+        merged['fonte_sinal'] = row.get('fonte_sinal') or observation.get('fonte_busca') or ''
         merged['revisao_humana'] = row.get('revisao_humana') or 'pendente'
+        if not key and merged['url_candidata_pendente']:
+            merged['encaminhamento'] = 'revisao_pendente'
+        elif not key and any(merged[signal] == 'sim' for signal in
+                           ('google_business_observado', 'presenca_social_observada', 'presenca_diretorio_observada')):
+            merged['encaminhamento'] = 'primeiro_site_potencial'
         enriched.append(merged)
     out_fields = list(dict.fromkeys(fields + list(EXTRA_COLUMNS)))
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -297,15 +340,34 @@ def run(args, probe=probe_subprocess):
         writer.writeheader()
         writer.writerows(enriched)
     counts = {state: sum(row['status_url'] == state for row in enriched) for state in ROUTES}
+    routes = {route: sum(row['encaminhamento'] == route for row in enriched)
+              for route in ('auditoria_visual_futura', 'revisao_pendente',
+                            'avaliar_site_inoperante', 'primeiro_site_potencial',
+                            'avaliar_primeiro_site')}
     errors = {}
     for row in enriched:
         if row['status_url'] == 'falha_tecnica':
             errors[row['motivo']] = errors.get(row['motivo'], 0) + 1
     summary = {'entrada': str(source), 'saida_csv': str(output), 'total': len(enriched),
                'urls_unicas': len(unique), 'urls_reutilizadas': len(reused),
-               'contagens': counts, 'erros': errors,
+               'contagens': counts, 'encaminhamentos': routes, 'erros': errors,
+               'limitados_por_bytes': sum(row['motivo'] == 'limite_bytes' for row in enriched),
                'tempo_total_ms': round((time.monotonic() - started) * 1000)}
     report.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    if getattr(args, 'search_plan', None):
+        plan = Path(args.search_plan)
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        with plan.open('w', newline='', encoding='utf-8') as handle:
+            writer = csv.DictWriter(handle, fieldnames=['id', 'empresa', 'cidade', 'consulta_1', 'consulta_2', 'status'])
+            writer.writeheader()
+            for row, key in zip(rows, keys):
+                if not key:
+                    queries = prepared_queries(row.get(name_col) or '', row.get(city_col) or '' if city_col else '')
+                    writer.writerow({'id': row.get(id_col) or '' if id_col else '',
+                                     'empresa': row.get(name_col) or '',
+                                     'cidade': row.get(city_col) or '' if city_col else '',
+                                     'consulta_1': queries[0], 'consulta_2': queries[1] if len(queries) > 1 else '',
+                                     'status': 'pendente'})
     return summary
 
 
@@ -328,6 +390,10 @@ def main():
     parser.add_argument('--byte-limit', type=int, default=262144)
     parser.add_argument('--reuse-hours', type=float, default=24,
                         help='Reutilizar resultados acessíveis recentes do CSV de saída; 0 desativa')
+    parser.add_argument('--search-plan', help='CSV com até duas consultas preparadas por empresa sem URL')
+    parser.add_argument('--search-results', help='JSON de resultados estruturados da pesquisa no navegador')
+    parser.add_argument('--use-existing-observations', action='store_true',
+                        help='Reaproveitar categorias explícitas do CSV de prospecção, sem nova busca')
     args = parser.parse_args()
     if not (0 < args.timeout <= 30 and 1 <= args.workers <= 5 and 0 <= args.retries <= 1
             and 0 <= args.redirects <= 4 and 1024 <= args.byte_limit <= 1048576
