@@ -14,7 +14,7 @@ Assunto, se necessário: `Prévia de site para [Empresa]`
 >
 > scarasoft — Lucas Scaranello
 
-Use apenas nome da empresa, prévia e contatos verificados. Não prometa preço, gratuidade, hospedagem, resultados ou disponibilidade. Não descreva o site atual como antigo, nem simule um pedido de serviço. A assinatura já foi aprovada; o e-mail e telefone comerciais ainda precisam ser definidos pelo responsável.
+Use apenas nome da empresa, prévia e contatos verificados. Não prometa preço, gratuidade, hospedagem, resultados ou disponibilidade. Não descreva o site atual como antigo, nem simule um pedido de serviço. A assinatura, o e-mail e o telefone comerciais foram definidos por Lucas; consulte os contatos na configuração local `.env`, sem copiá-los para o Git.
 
 ## Verificação antes da abordagem
 
@@ -26,7 +26,9 @@ Para registrar um formulário elegível **sem envio**, use `python3 tools/contro
 
 ## Autorização técnica e tentativa única
 
-`contact-begin` falha por padrão. Para um lote expressamente autorizado por Lucas, registre localmente `data/outreach-authorization.json` (ignorado pelo Git) com `mode: "live"`, `approved_by: "Lucas Scaranello"`, `batch_id`, `industry`, `city` e `max_contacts` iguais ao escopo aprovado. Configure `BR_COMMERCIAL_EMAIL` e `BR_COMMERCIAL_PHONE` no ambiente local. O comando confere o lote, escopo, limite, assinatura e contatos da mensagem antes de reservar a tentativa. O arquivo técnico não substitui a autorização humana.
+`contact-begin` falha por padrão. Para um lote expressamente autorizado por Lucas, registre localmente `data/outreach-authorization.json` (ignorado pelo Git) com `mode: "live"`, `approved_by: "Lucas Scaranello"`, `batch_id`, `industry`, `city` e `max_contacts` iguais ao escopo aprovado. Carregue `BR_COMMERCIAL_EMAIL` e `BR_COMMERCIAL_PHONE` de `.env` no ambiente local antes de executar o comando. O comando confere o lote, escopo, limite, assinatura e contatos da mensagem antes de reservar a tentativa. O arquivo técnico não substitui a autorização humana. A prévia local não é uma URL pública para a mensagem comercial.
+
+No terminal, dentro do repositório, carregue a configuração local com `set -a; . ./.env; set +a` antes dos comandos de contato. Não copie os valores para arquivos versionados.
 
 ```sh
 python3 tools/control.py contact-begin --job JOB_ID --worker WORKER_ID --message-file runs/JOB_ID/outreach.txt --form-url 'https://empresa.example/contato'

@@ -20,6 +20,8 @@ O comando instala dependências se necessário, roda lint e `vite build`, depois
 
 ## Vercel
 
+Lucas optou por operar localmente e autorizou remover o projeto fictício `revamp-br-mvp-demo-20261010`. Ele foi removido; nenhuma nova publicação faz parte da operação local. A geração e o dashboard continuam funcionando na máquina, mas uma URL `127.0.0.1` não pode ser enviada a uma empresa como prévia pública. Antes de contato real que contenha link, definir e autorizar a forma de publicação e verificar a URL acessível sem sessão.
+
 O escopo de `settings.json` foi identificado por `whoami` e `teams ls` na conta Lucas; reconfirme-o antes de publicar com a CLI indicada (`pnpm dlx vercel@59.16.0`). Não use o escopo do autor original. Crie um projeto novo `revamp-JOB_ID` para a pasta `site/`, sem copiar `.vercel` nem variáveis de outro projeto. Confira o conteúdo de `.vercel/project.json` antes do deploy.
 
 **Atenção ao primeiro deploy:** na CLI 59.16.0, o primeiro `vercel deploy` do projeto de demonstração retornou `target: production` e criou alias de produção, mesmo sem `--prod`. Portanto, antes de criar outro projeto ou fazer seu primeiro deploy, confirme a autorização explícita para essa mudança ou um procedimento de prévia comprovado pela CLI. Não presuma que omitir `--prod` basta. A conta também redirecionou a URL a login Vercel para visitante sem sessão; ela não é uma prévia pública utilizável. Não desative a proteção sem autorização. Verifique a URL sem login, página inicial, rota de serviço, imagens, CTA e os cabeçalhos `noindex` antes de usá-la em contato comercial. Não altere domínios ou projetos existentes.

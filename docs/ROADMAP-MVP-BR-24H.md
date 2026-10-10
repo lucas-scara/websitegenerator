@@ -2,7 +2,7 @@
 
 | Metadado | Definição |
 |---|---|
-| Status | Plano aprovado; implementação ainda não iniciada |
+| Status | Implementação local em andamento; piloto externo pendente |
 | Atualização | 10/10/2026 |
 | Repositório | `lucas-scara/websitegenerator` (fork de `albertshiney/websitegenerator`) |
 | Responsável | Lucas Scaranello |
@@ -92,8 +92,10 @@ Mensagem curta, cordial e transparente em **português brasileiro**, assinada co
 ## 10. Pendências de entrada do responsável (não hardcodar)
 
 - Assinatura comercial: **aprovada — `scarasoft — Lucas Scaranello`**.
-- E-mail comercial e telefone/WhatsApp para prospecção: **aguardando definição**; não confundir com o e-mail dos commits.
-- Conta/escopo Vercel, chave Firecrawl e cidade do piloto: resolver **antes da execução externa**, por configuração local ou conexão, sem registrar segredos no repositório.
+- E-mail comercial e telefone/WhatsApp para prospecção: informados por Lucas e configurados no `.env` local, sem versionar os valores.
+- Cidade do piloto: **Bauru, São Paulo**; deve ser informada no formulário do lote.
+- Conta/escopo Vercel: identificados na conta Lucas, mas o proprietário optou por operação local e autorizou a remoção do projeto fictício de demonstração. A chave Firecrawl ainda deve ser configurada localmente antes da prospecção.
+- Uma prévia local não é acessível por empresas externas. O gate de URL pública e o envio real dependem de decisão posterior sobre publicação, além da autorização específica do lote.
 - Lote real de prospecção e envio: requer autorização específica de segmento, localidade e volume antes do primeiro envio.
 
 ## 11. Pós-MVP (fora das 24h)
