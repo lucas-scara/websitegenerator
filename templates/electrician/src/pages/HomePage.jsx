@@ -1,3 +1,4 @@
+import { isServiceEnabled } from '../services.js'
 import { asset } from '../business.js'
 import { copy } from '../business.js'
 import { useEffect, useRef } from 'react'
@@ -103,9 +104,9 @@ function Features() {
     { eyebrow: '01 / Instalação', heading: "Instalações elétricas", href: '/electrical-installation', text: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.", Component: InstallShuffler },
     { eyebrow: "02 / Avaliação", heading: "Reparos elétricos", href: '/electrical-repairs', text: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.", Component: SparkWatch },
     { eyebrow: "03 / Planejamento", heading: "Converse sobre seu projeto", href: '/pricing', text: "Converse sobre o escopo, os materiais, o prazo e os custos antes de decidir.", Component: BookingScheduler },
-  ]
+  ].filter((card) => isServiceEnabled(card.href))
   return (
-    <section id="kerneomraader" ref={ref} className="relative py-24 sm:py-32 px-6 sm:px-10 lg:px-16">
+    cards.length > 0 ? <section id="kerneomraader" ref={ref} className="relative py-24 sm:py-32 px-6 sm:px-10 lg:px-16">
       <div className="max-w-7xl mx-auto">
         <SectionHeading eyebrow={"Nossa especialidade"} title={"Como podemos ajudar"} flourish={"em casa e no trabalho."} className="mb-14 sm:mb-20" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -124,7 +125,7 @@ function Features() {
           ))}
         </div>
       </div>
-    </section>
+    </section> : null
   )
 }
 
@@ -133,15 +134,22 @@ function Features() {
 ---------------------------------------------------------------- */
 function WhyUs() {
   const bullets = [
-    "[Serviços elétricos](/electrical-installation) para suas necessidades",
+    ...(isServiceEnabled("/electrical-installation") ? ["[Serviços elétricos](/electrical-installation) para suas necessidades"] : []),
     "Converse sobre o escopo e peça um orçamento",
-    "Converse sobre [reparos elétricos](/electrical-repairs)",
+    ...(isServiceEnabled("/electrical-repairs") ? ["Converse sobre [reparos elétricos](/electrical-repairs)"] : []),
   ]
+  const optionalLinks = [
+    ["/consumer-units", "[troca de quadro elétrico](/consumer-units)"],
+    ["/rcd-protection", "[proteção DR](/rcd-protection)"],
+    ["/electrical-enclosures", "[quadro elétrico](/electrical-enclosures)"],
+    ["/rewiring", "[reforma elétrica](/rewiring)"],
+    ["/maintenance", "[manutenção](/maintenance)"],
+  ].filter(([path]) => isServiceEnabled(path)).map(([, label]) => label)
   const more = [
     "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.",
     "Converse com a empresa sobre as necessidades elétricas do imóvel e peça detalhes do serviço antes de contratar.",
-    "Conheça opções como [troca de quadro elétrico](/consumer-units), [proteção DR](/rcd-protection), [quadro elétrico](/electrical-enclosures), [reforma elétrica](/rewiring) e [manutenção](/maintenance).",
-    "Veja também informações sobre [carregadores para veículos elétricos](/ev-charging) e converse sobre a instalação adequada para o seu imóvel.",
+    ...(optionalLinks.length ? ["Conheça opções como " + optionalLinks.join(", ") + "."] : []),
+    ...(isServiceEnabled("/ev-charging") ? ["Veja também informações sobre [carregadores para veículos elétricos](/ev-charging) e converse sobre a instalação adequada para o seu imóvel."] : []),
   ]
   return (
     <section id="derfor" className="relative py-24 sm:py-32 px-6 sm:px-10 lg:px-16 overflow-hidden">
@@ -163,7 +171,7 @@ function WhyUs() {
             </ul>
           </Reveal>
           <Reveal delay={200} className="prose-template mt-6 max-w-2xl">
-            <p>{"Conheça nossos serviços de instalação, manutenção e avaliação elétrica. Entre em contato para verificar escopo, prazo e orçamento."}</p>
+            <p>{"Entre em contato para verificar escopo, prazo e orçamento."}</p>
           </Reveal>
           <Reveal delay={240} className="mt-8">
             <QuoteBtn>{"Converse com um eletricista"}</QuoteBtn>
@@ -210,7 +218,8 @@ function ProService() {
     "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.",
     "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.",
     "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.",
-    "Veja opções de [reparos elétricos](/electrical-repairs) e [carregadores para veículos elétricos](/ev-charging). Confirme a disponibilidade antes de contratar.",
+    ...(isServiceEnabled("/electrical-repairs") ? ["Veja opções de [reparos elétricos](/electrical-repairs). Confirme a disponibilidade antes de contratar."] : []),
+    ...(isServiceEnabled("/ev-charging") ? ["Veja opções de [carregadores para veículos elétricos](/ev-charging). Confirme a disponibilidade antes de contratar."] : []),
   ]
   return (
     <section className="relative py-24 sm:py-32 px-6 sm:px-10 lg:px-16 bg-deep text-white overflow-hidden rounded-t-6xl">
@@ -254,7 +263,7 @@ function Inspiration() {
   return (
     <section id="projekter" className="relative py-24 sm:py-32 overflow-hidden">
       <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 flex flex-col lg:flex-row lg:items-end justify-between gap-8 mb-12">
-        <SectionHeading eyebrow={"Inspiração"} title={"Ideias de"} flourish="iluminação." lead={"Veja referências de iluminação e interiores. Todas as imagens são ilustrativas."} />
+        <SectionHeading eyebrow={"Inspiração"} title={"Ideias para"} flourish="seu projeto." lead={"Veja referências ilustrativas dos serviços apresentados nesta prévia."} />
         <Reveal delay={120}><Btn to="/inspiration" variant="dark">{"Ver imagens"}</Btn></Reveal>
       </div>
       <Reveal className="relative">
@@ -287,7 +296,7 @@ function Social() {
         <div className="lg:col-span-6">
           <SectionHeading eyebrow={"Seu próximo projeto"} title={"Comece com"} flourish={"uma conversa"} as="h3" />
           <Reveal delay={100} className="prose-template mt-6 max-w-xl">
-            <p>{"De uma pequena atualização elétrica a uma reforma, conte o que você precisa. Ligue ou envie um e-mail para conversar sobre os próximos passos."}</p>
+            <p>{"Conte o que você precisa. Ligue ou envie um e-mail para conversar sobre os próximos passos."}</p>
           </Reveal>
           <Reveal delay={160} className="mt-8">
             <span className="text-muted">Prévia ilustrativa de site</span>
@@ -313,7 +322,7 @@ export default function HomePage() {
   return (
     <>
       <Hero />
-      <section id="ydelser" className="relative py-24 sm:py-32 px-6 sm:px-10 lg:px-16">
+      {HOME_SERVICES.length > 0 && <section id="ydelser" className="relative py-24 sm:py-32 px-6 sm:px-10 lg:px-16">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 mb-12 sm:mb-16">
             <SectionHeading eyebrow={"Serviços"} title={"Soluções elétricas,"} flourish={"em um só lugar."} />
@@ -321,14 +330,14 @@ export default function HomePage() {
           </div>
           <ServicesGrid items={HOME_SERVICES} />
         </div>
-      </section>
+      </section>}
       <Features />
       <Reviews flourish={"Vamos conversar sobre seu projeto"} />
       <WhyUs />
       <Pillars />
       <Protocol />
       <ProService />
-      <Inspiration />
+      {GALLERY.length > 0 && <Inspiration />}
       <TrustSignals />
       <Social />
       <ContactSection />

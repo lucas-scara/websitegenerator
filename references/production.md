@@ -2,11 +2,13 @@
 
 ## Gerar a prévia
 
-Use `python3 tools/quick_site.py templates` para listar modelos. O único modelo atual é `electrician`, adequado somente a eletricistas. Preserve layout, imagens ilustrativas e rotas. Por empresa, personalize apenas nome, telefone, e-mail, rua, cidade, CEP e cor da marca. Não invente preços, horários, certificações, avaliações, equipe ou projetos.
+Use `python3 tools/quick_site.py templates` para listar modelos. O único modelo atual é `electrician`, adequado somente a eletricistas. Preserve layout, imagens ilustrativas e rotas. Por empresa, personalize nome, telefone, e-mail, rua, cidade, CEP, cor da marca e serviços verificados. Não invente preços, horários, certificações, avaliações, equipe ou projetos.
 
 ```sh
-./website --template electrician --name 'Elétrica Exemplo' --theme-color '#2563eb' --phone '+55 11 99999-9999' --email 'contato@exemplo.com.br' --street 'Rua Exemplo, 10' --city 'São Paulo' --zip '01000-000'
+./website --template electrician --name 'Elétrica Exemplo' --theme-color '#2563eb' --phone '+55 11 99999-9999' --email 'contato@exemplo.com.br' --street 'Rua Exemplo, 10' --city 'São Paulo' --zip '01000-000' --enabled-service electrical-installation
 ```
+
+`enabled_services` aceita somente IDs de `templates/electrician/service-catalog.json`; na CLI, repita `--enabled-service ID`, e no comando `batch` use uma lista JSON. A omissão gera lista vazia, inclusive em chamadas antigas: nenhum serviço específico fica anunciado sem confirmação. Para cada ID ativado, registre em `runs/JOB_ID/service-evidence.json` o ID, a URL exata do site original e a evidência observada (trecho ou captura); mantenha esse arquivo fora de `site/` e do Git. Não ative serviços por inferência a partir do segmento, fotos ilustrativas ou texto genérico. Revise menu, home, lista, galeria, formulário e URL direta de cada serviço desativado. As prévias trazem `noindex, nofollow` no HTML e no cabeçalho Vercel. O fallback da SPA exibe página não encontrada em URLs desativadas; no host estático, a resposta HTTP pode ser 200, então não trate esse status isolado como validação de conteúdo.
 
 Nome e pelo menos um contato público verificado são obrigatórios; endereço e CEP são opcionais. Registre fontes. A saída fica em `runs/quick/ID/site/`, com manifesto ao lado. O gerador cria cópia isolada do build preparado, sem `npm` por empresa. Valide nome, contatos, layout e navegação. O formulário da prévia é demonstrativo e não envia mensagens.
 

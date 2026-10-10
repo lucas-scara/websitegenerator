@@ -1,3 +1,4 @@
+import { isServiceEnabled } from '../services.js'
 import { asset } from '../business.js'
 import { copy } from '../business.js'
 import { Check, Info } from 'lucide-react'
@@ -11,13 +12,14 @@ import { QuoteBtn } from '../components/Buttons.jsx'
 
 /* All prices and terms verbatim from /pricing */
 const GROUPS = [
- {title: 'Pequenos serviços elétricos', label: 'Conte o que precisa', lines: [{name: 'Iluminação, tomadas e melhorias do dia a dia', price: 'Solicite um orçamento', unit: 'Conforme suas necessidades'}]},
- {title: 'Reformas e instalações', label: 'Planeje o serviço', lines: [{name: 'Converse sobre escopo e materiais', price: 'Solicite um orçamento', unit: 'Para seu projeto'}]},
- {title: 'Avaliação de falhas', label: 'Descreva o problema', lines: [{name: 'Avaliação e próximos passos', price: 'Entre em contato', unit: 'Consulte a disponibilidade'}]},
+ {service: '/electrical-installation', title: 'Pequenos serviços elétricos', label: 'Conte o que precisa', lines: [{name: 'Iluminação, tomadas e melhorias do dia a dia', price: 'Solicite um orçamento', unit: 'Conforme suas necessidades'}]},
+ {service: '/rewiring', title: 'Reformas e instalações', label: 'Planeje o serviço', lines: [{name: 'Converse sobre escopo e materiais', price: 'Solicite um orçamento', unit: 'Para seu projeto'}]},
+ {service: '/electrical-repairs', title: 'Avaliação de falhas', label: 'Descreva o problema', lines: [{name: 'Avaliação e próximos passos', price: 'Entre em contato', unit: 'Consulte a disponibilidade'}]},
  {title: 'Agendamento', lines: [{name: 'Data desejada', text: 'Entre em contato para combinar um horário adequado.'}]},
  {title: 'Seu orçamento', accent: true, lines: [{name: 'Entenda os custos', text: 'Peça por escrito o escopo, os materiais, a mão de obra e eventuais cobranças adicionais.'}]},
  {title: 'Acesso e localização', lines: [{name: 'Dados do imóvel', text: 'Informe o endereço e os requisitos de acesso ao fazer contato.'}]},
 ]
+const VISIBLE_GROUPS = GROUPS.filter((group) => !group.service || isServiceEnabled(group.service))
 const FINE_PRINT = ['Confira quais materiais e custos estão incluídos no orçamento.', 'Confirme escopo e prazo antes do início do serviço.']
 
 export default function PricesPage() {
@@ -47,7 +49,7 @@ export default function PricesPage() {
           <Reveal delay={120} className="mt-8 inline-flex items-center gap-2 rounded-full bg-deep text-white px-4 py-2 font-mono text-[11px] uppercase tracking-widest">{"Entre em contato para conversar sobre suas necessidades."}</Reveal>
 
           <div className="mt-8 grid md:grid-cols-2 gap-5">
-            {GROUPS.map((g, i) => (
+            {VISIBLE_GROUPS.map((g, i) => (
               <Reveal key={g.title} delay={(i % 2) * 100}>
                 <article className={`h-full rounded-4xl border p-6 sm:p-8 transition-all duration-500 hover:-translate-y-1 ${g.accent ? 'bg-deep text-white border-deep shadow-2xl shadow-deep/20' : 'bg-white border-divider shadow-sm hover:shadow-xl hover:shadow-primary/10'}`}>
                   <div className="flex items-start justify-between gap-4">
