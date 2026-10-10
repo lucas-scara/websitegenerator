@@ -22,7 +22,7 @@ Confirme no site original um formulário com campo de mensagem e botão de envio
 
 Reabra o formulário antes de preencher. Use nome completo Lucas Scaranello e somente e-mail/telefone comerciais configurados localmente. Nunca use o e-mail do commit como substituto automático. Salve a mensagem exata em `runs/JOB_ID/outreach.txt` e confira remetente, URL pública, formulário e prévia antes de qualquer ação de envio.
 
-Para registrar um formulário elegível **sem envio**, use `python3 tools/control.py contact-simulate --job JOB_ID --worker WORKER_ID --message-file runs/JOB_ID/outreach.txt --form-url 'https://empresa.example/contato'`. O job termina como `simulated`, conserva a mensagem e a URL, e não cria reserva em `submissions`. Não clique no botão de envio. Um lote futuro autorizado precisa de um novo job, com identidade/histórico conciliados pelo responsável; não recicle o job simulado automaticamente.
+Para registrar um formulário elegível **sem envio**, use `python3 tools/control.py contact-simulate --job JOB_ID --worker WORKER_ID --message-file runs/JOB_ID/outreach.txt --form-url 'https://empresa.example/contato'`. O job termina como `simulated`, conserva a mensagem e a URL, e não cria reserva em `submissions`. Não clique no botão de envio. Quando Lucas autorizar esse lote, use `resume-simulated --job JOB_ID --worker NOVO_WORKER_ID`, revalide site, formulário e mensagem com os contatos comerciais definidos, então siga o envio único. Sem autorização local exata, `resume-simulated` falha.
 
 ## Autorização técnica e tentativa única
 

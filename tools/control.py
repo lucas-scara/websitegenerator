@@ -150,6 +150,8 @@ def cancel_batch(bid, reason):
 def clear_all(reason):
     """Clear dashboard work records while retaining operational configuration."""
     if not reason.strip(): raise ValueError('Provide a reset reason')
+    if DB.resolve() == (ROOT / 'data' / 'revamp.sqlite3').resolve():
+        raise ValueError('clear-all is disabled for the durable MVP ledger; use a disposable REVAMP_DB for tests')
     with connect() as c:
         counts = {table: c.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] for table in ('batches','jobs','identities','events','workers','submissions')}
         # Delete children before their referenced parents. `config` intentionally survives.
@@ -216,7 +218,7 @@ def update(jid, worker, stage=None, detail='', fields=None):
         event(c,jid,detail or f'Stage: {new}')
         return {'id':jid,'stage':new}
 
-def require_outreach_authorization(c, job, message):
+def require_outreach_authorization(c, job, message=None):
     """Fail closed until a specific, locally recorded batch is approved for live contact."""
     try:
         auth = json.loads(OUTREACH_AUTH_FILE.read_text())
@@ -235,7 +237,7 @@ def require_outreach_authorization(c, job, message):
     phone = os.environ.get('BR_COMMERCIAL_PHONE', '').strip()
     if not email or not phone or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
         raise ValueError('Approved commercial email and phone must be configured locally')
-    if 'scarasoft — Lucas Scaranello' not in message or email not in message or phone not in message:
+    if message is not None and ('scarasoft — Lucas Scaranello' not in message or email not in message or phone not in message):
         raise ValueError('Message must contain the approved signature and configured commercial contacts')
     attempts = c.execute('SELECT COUNT(*) FROM submissions JOIN jobs ON jobs.id=submissions.job_id WHERE jobs.batch_id=?',
                          (job['batch_id'],)).fetchone()[0]
@@ -288,6 +290,26 @@ def contact_simulate(jid, worker, message, form_url):
         c.execute("UPDATE workers SET status='idle',updated_at=? WHERE id=?",(now(),worker))
         event(c,jid,'Contato simulado; nenhum submit realizado.')
         return {'id':jid,'stage':'simulated','contact_status':'simulated'}
+
+def resume_simulated(jid, worker):
+    """Reclaim an unsent simulation only after this exact batch gains live authorization."""
+    if not worker: raise ValueError('Worker ID is required')
+    with connect() as c:
+        j=c.execute('SELECT * FROM jobs WHERE id=?',(jid,)).fetchone()
+        if not j or j['stage']!='simulated': raise ValueError('Only a simulated job can be resumed')
+        if c.execute('SELECT 1 FROM submissions WHERE job_id=?',(jid,)).fetchone():
+            raise ValueError('A real submission attempt already exists')
+        require_outreach_authorization(c,j)
+        if c.execute("SELECT 1 FROM workers WHERE id=? AND status='running'",(worker,)).fetchone():
+            raise ValueError('Worker already owns a running job')
+        limit=int(c.execute("SELECT value FROM config WHERE key='max_workers'").fetchone()[0])
+        if c.execute("SELECT COUNT(*) FROM workers WHERE status='running'").fetchone()[0]>=limit:
+            raise ValueError('Worker capacity reached')
+        c.execute("UPDATE jobs SET stage='ready',worker=?,contact_status='not_sent',updated_at=? WHERE id=?",(worker,now(),jid))
+        c.execute('INSERT INTO workers VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET job_id=excluded.job_id,status=excluded.status,updated_at=excluded.updated_at',(worker,jid,'running',now()))
+        c.execute("UPDATE batches SET status='running' WHERE id=?",(j['batch_id'],))
+        event(c,jid,'Authorized simulation reclaimed; recheck preview, form and message before contact.')
+        return {'id':jid,'stage':'ready','worker':worker}
 
 def contact_finish(jid,worker,status,evidence):
     if status not in ('submitted','sent','uncertain','blocked') or not evidence.strip(): raise ValueError('Provide result and observed evidence')
@@ -407,6 +429,7 @@ def main():
     s=sub.add_parser('capacity'); s.add_argument('count',type=int,choices=range(1,6))
     s=sub.add_parser('contact-begin'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--form-url',required=True)
     s=sub.add_parser('contact-simulate'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--form-url',required=True)
+    s=sub.add_parser('resume-simulated'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True)
     s=sub.add_parser('contact-finish'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--status',choices=['submitted','sent','uncertain','blocked'],required=True); s.add_argument('--evidence',required=True)
     s=sub.add_parser('manual-outreach'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--reason',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--email',default=''); s.add_argument('--phone',default='')
     s=sub.add_parser('recover'); s.add_argument('--job',required=True); s.add_argument('--reason',required=True)
@@ -423,6 +446,7 @@ def main():
         elif a.cmd=='update': result=update(a.job,a.worker,a.stage,a.detail,json.loads(a.fields.read_text()) if a.fields else None)
         elif a.cmd=='contact-begin': result=contact_begin(a.job,a.worker,a.message_file.read_text(),a.form_url)
         elif a.cmd=='contact-simulate': result=contact_simulate(a.job,a.worker,a.message_file.read_text(),a.form_url)
+        elif a.cmd=='resume-simulated': result=resume_simulated(a.job,a.worker)
         elif a.cmd=='contact-finish': result=contact_finish(a.job,a.worker,a.status,a.evidence)
         elif a.cmd=='manual-outreach': result=manual_outreach(a.job,a.worker,a.reason,a.message_file.read_text(),a.email,a.phone)
         elif a.cmd=='capacity':

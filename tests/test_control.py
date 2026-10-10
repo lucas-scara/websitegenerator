@@ -64,6 +64,14 @@ class LedgerTests(unittest.TestCase):
         jid=self.ready()
         control.update(jid,'worker',fields={'qualification':{}})
         with self.assertRaises(ValueError): control.contact_begin(jid,'worker',self.message(),'https://business0.example/contact')
+    def test_clear_all_refuses_durable_ledger(self):
+        disposable=control.DB
+        control.DB=control.ROOT/'data/revamp.sqlite3'
+        try:
+            with self.assertRaisesRegex(ValueError, 'disabled'):
+                control.clear_all('unsafe reset')
+        finally:
+            control.DB=disposable
     def test_contact_is_disabled_without_exact_batch_authorization(self):
         jid=self.ready()
         control.OUTREACH_AUTH_FILE.unlink()
@@ -88,6 +96,13 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(job['data']['contact_simulation']['form_url'],'https://business0.example/contact')
         self.assertEqual(control.snapshot()['workers'][0]['status'],'idle')
         with self.assertRaises(ValueError): control.contact_begin(jid,'worker',self.message(),'https://business0.example/contact')
+        with self.assertRaisesRegex(ValueError, 'disabled'): control.resume_simulated(jid,'worker-2')
+        self.authorize()
+        resumed=control.resume_simulated(jid,'worker-2')
+        self.assertEqual(resumed['stage'],'ready')
+        control.contact_begin(jid,'worker-2',self.message(),'https://business0.example/contact')
+        with control.connect() as c:
+            self.assertEqual(c.execute('SELECT COUNT(*) FROM submissions').fetchone()[0],1)
     def test_parallel_claims_unique_and_capacity(self):
         ids={self.add(n) for n in range(5)}
         def claim(i):
