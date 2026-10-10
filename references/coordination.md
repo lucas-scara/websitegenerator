@@ -1,5 +1,7 @@
 # Coordenador, ledger e trabalhadores
 
+Antes de considerar um site descoberto como confirmado, execute o [verificador de URLs](../docs/VERIFICACAO-URLS.md) no CSV de candidatos e confira `status_url`, `motivo` e `encaminhamento`. Uma indicação em resultado de busca permanece pendente até essa sondagem. A classificação técnica não inicia auditoria visual nem contato automaticamente.
+
 Todos os comandos partem da raiz do projeto. O dashboard monitora estados e recebe pedidos de lote; o coordenador Codex executa o trabalho. `data/revamp.sqlite3` é o ledger persistente. Use `REVAMP_DB` apenas para teste. Separe diretórios e abas por empresa.
 
 ## Comandos essenciais
