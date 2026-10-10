@@ -14,7 +14,8 @@
 ## Dependências para fases externas
 
 - Lucas informou e-mail e telefone/WhatsApp comerciais, configurados em `.env` local, e selecionou Bauru, São Paulo, para o piloto. A cidade é digitada no formulário do lote.
-- Ainda necessários para prospecção/contato externo: chave Firecrawl, publicação de prévia acessível ao destinatário e autorização específica do lote para envio real.
+- Firecrawl: configurado localmente após a F2; consulta de uso autenticada com sucesso e indicou 1.036 créditos restantes. A consulta não raspou páginas.
+- Ainda necessários para o piloto externo: decisão/publicação de uma prévia acessível ao destinatário e autorização específica do lote para envio real.
 
 ## F1 — localização e prévia local
 
@@ -28,7 +29,7 @@
 ## F2 — pré-condições de integração
 
 - Vercel CLI 59.16.0: `whoami` retornou `lucasscaranello-3315`; `teams ls` listou `lucasscaranello-3315s-projects`. O escopo foi configurado em `settings.json`, sem criar projeto nem realizar deploy.
-- Firecrawl: nenhuma chave em `.env` ou no processo; prospecção via Firecrawl ainda não foi executada.
+- Na época da F2, Firecrawl não estava configurado e a prospecção via Firecrawl não foi executada.
 - Na época da F2, contatos comerciais e autorização do lote estavam ausentes. Os contatos foram configurados localmente depois; `contact-begin` permanece bloqueado sem autorização específica. A simulação local do ledger é coberta por teste, sem registro em `submissions`.
 
 ## F2 — simulação e Vercel (resultado observado)
@@ -46,10 +47,13 @@
 - O vínculo `.vercel/project.json` da cópia local fictícia foi removido para impedir comandos acidentais contra um projeto inexistente. O site gerado localmente permanece disponível na pasta `runs/quick/`.
 - Operação local mantém geração, dashboard e simulação. Para mensagem comercial com link, será necessária uma URL pública verificada; a URL `127.0.0.1` não é acessível ao destinatário.
 - Dashboard reiniciado em `http://127.0.0.1:4310/` e respondeu HTTP 200. `git check-ignore .env` confirmou que os contatos locais não entram no Git; após a atualização, 41 testes passaram e `git diff --check` não apontou erros.
+- Firecrawl: `python3 tools/site_assets.py credits --env-file .env` retornou `authenticated: true` e `remaining_credits: 1036`. Esta chamada apenas consultou uso; não raspou páginas.
+- `references/firecrawl-scouting.md` foi totalmente adaptado para pt-BR, mantendo comandos, limites e a separação entre busca de empresas, coleta de evidências e decisão humana de qualificação.
+- Template: frase da página “Sobre” adaptada para “Atendemos toda a região e também clientes das comunidades próximas.” `quick_site.py prepare` passou; nova geração fictícia para Bauru concluiu em 0,11 s e o bundle gerado contém a frase.
 
 ## F3 — piloto externo
 
-**Pendente, sem campanha executada.** Bauru e os contatos comerciais foram definidos depois da F2. Ainda faltam chave Firecrawl, publicação de prévia pública acessível e autorização específica do lote de 3 eletricistas para envio real. Nenhuma empresa real foi qualificada ou contatada. O projeto Vercel de demonstração foi removido por decisão de Lucas. Não há evidência de 3 casos reais nem envio real; estes itens do roadmap seguem abertos.
+**Pendente, sem campanha executada.** Bauru e os contatos comerciais foram definidos depois da F2, e a chave Firecrawl já autenticou localmente. Ainda faltam a decisão/publicação de uma prévia acessível ao destinatário e autorização específica do lote de 3 eletricistas para envio real. Nenhuma empresa real foi qualificada ou contatada. O projeto Vercel de demonstração foi removido por decisão de Lucas. Não há evidência de 3 casos reais nem envio real; estes itens do roadmap seguem abertos.
 
 ## F4 — regressão e PR
 

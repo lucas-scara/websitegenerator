@@ -55,4 +55,5 @@ Em cada atualização, informar: etapa efetivamente testada, link/evidência qua
 
 - Cidade-alvo do piloto: **Bauru, São Paulo**. O operador informa a cidade no formulário do lote; ela não é fixa no código.
 - Contatos comerciais: configurados no `.env` local, sem versionar os valores. A autorização do lote para envio real ainda é necessária.
+- Chave Firecrawl configurada localmente; a consulta de uso autenticou com 1.036 créditos restantes. Nenhuma empresa foi raspada durante essa checagem.
 - Lucas autorizou remover o projeto fictício de demonstração da Vercel e operar localmente. A prévia local não fornece URL pública para mensagem comercial; resolver a publicação antes de contato real com link.

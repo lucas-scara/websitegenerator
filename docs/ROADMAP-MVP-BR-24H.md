@@ -94,7 +94,7 @@ Mensagem curta, cordial e transparente em **português brasileiro**, assinada co
 - Assinatura comercial: **aprovada — `scarasoft — Lucas Scaranello`**.
 - E-mail comercial e telefone/WhatsApp para prospecção: informados por Lucas e configurados no `.env` local, sem versionar os valores.
 - Cidade do piloto: **Bauru, São Paulo**; deve ser informada no formulário do lote.
-- Conta/escopo Vercel: identificados na conta Lucas, mas o proprietário optou por operação local e autorizou a remoção do projeto fictício de demonstração. A chave Firecrawl ainda deve ser configurada localmente antes da prospecção.
+- Conta/escopo Vercel: identificados na conta Lucas, mas o proprietário optou por operar localmente e autorizou remover o projeto fictício de demonstração. A chave Firecrawl está configurada localmente e autenticou com sucesso; não houve raspagem durante a checagem.
 - Uma prévia local não é acessível por empresas externas. O gate de URL pública e o envio real dependem de decisão posterior sobre publicação, além da autorização específica do lote.
 - Lote real de prospecção e envio: requer autorização específica de segmento, localidade e volume antes do primeiro envio.
 

@@ -13,7 +13,7 @@ import { TrustSignals } from '../components/HomeSections.jsx'
 export default function AboutPage() {
   useSEO({ title: copy("Sobre Your Company | Your Company"), description: "Converse conosco sobre o serviço elétrico, o prazo desejado e o orçamento para seu imóvel.", path: '/about', image: asset("/images/interior.jpg") })
   const facts = [
-    { Icon: MapPin, title: "Para sua casa", text: `${SITE.street}, ${SITE.zip} ${SITE.city}. We cover all of your area and also help customers around the local community.` },
+    { Icon: MapPin, title: "Para sua casa", text: `${SITE.street}, ${SITE.zip} ${SITE.city}. Atendemos toda a região e também clientes das comunidades próximas.` },
     { Icon: ShieldCheck, title: "Serviços elétricos", text: "Entre em contato para conversar sobre suas necessidades." },
     { Icon: Users, title: "Comunicação direta", text: "Converse sobre suas necessidades e tire dúvidas antes do serviço." },
     { Icon: Award, title: "Experiência relevante", text: "Converse com a empresa sobre experiência, qualificação e exigências aplicáveis ao seu projeto." },
