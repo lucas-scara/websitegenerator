@@ -16,6 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = {'electrician': {'name': 'Eletricista · design base', 'path': ROOT / 'templates/electrician'}}
 
 
+def service_ids(template):
+    return set(json.loads((TEMPLATES[template]['path'] / 'services.json').read_text()))
+
+
 def fingerprint(template):
     digest = hashlib.sha256()
     for p in sorted(template.rglob('*')):
@@ -45,6 +49,10 @@ def validate(data):
     if not isinstance(color, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', color):
         raise ValueError('Theme color must be a six-digit hex color, e.g. #2563eb')
     result = {'theme_color': color.lower()}
+    enabled = data.get('enabled_services', [])
+    if not isinstance(enabled, list) or any(not isinstance(item, str) for item in enabled) or len(enabled) != len(set(enabled)) or not set(enabled) <= service_ids(template):
+        raise ValueError('enabled_services must be a list of unique service IDs from templates/electrician/services.json')
+    result['enabled_services'] = enabled
     for key in ('name', 'phone', 'email', 'street', 'city', 'zip'):
         value = data.get(key, '')
         if not isinstance(value, str) or len(value) > 180 or any(ord(c) < 32 for c in value):
@@ -58,7 +66,7 @@ def validate(data):
         raise ValueError('Use a phone number with digits, spaces, +, brackets or dashes')
     if result['email'] and not re.fullmatch(r'[^\s@<>"\\]+@[^\s@<>"\\]+\.[^\s@<>"\\]+', result['email']):
         raise ValueError('Enter a valid email address')
-    return template, {k: v for k, v in result.items() if v}
+    return template, {k: v for k, v in result.items() if v or k == 'enabled_services'}
 
 
 def create(data, output_root=None):
@@ -104,6 +112,7 @@ def main():
     p.add_argument('--template', choices=TEMPLATES, default='electrician')
     p.add_argument('--name', required=True)
     p.add_argument('--theme-color', dest='theme_color', default='#7cc0f7', help='Brand color as #RRGGBB')
+    p.add_argument('--enabled-services', nargs='*', default=[], metavar='ID', help='Verified service IDs from templates/electrician/services.json')
     for field in ('phone', 'email', 'street', 'city', 'zip'):
         p.add_argument('--' + field, default='')
     p = commands.add_parser('batch', help='Generate websites from a JSON array of business details')

@@ -6,6 +6,7 @@ import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ArrowUpRight, ArrowRight, Phone, Check } from 'lucide-react'
 import { SITE, HOME_SERVICES, GALLERY } from '../site.js'
+import { visibleServices, visibleServiceText } from '../services.js'
 import { useSEO } from '../lib/useSEO.js'
 import { renderMd } from '../lib/md.jsx'
 import Reveal from '../lib/Reveal.jsx'
@@ -109,7 +110,7 @@ function Features() {
       <div className="max-w-7xl mx-auto">
         <SectionHeading eyebrow={"Nossa especialidade"} title={"Como podemos ajudar"} flourish={"em casa e no trabalho."} className="mb-14 sm:mb-20" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {cards.map((c) => (
+          {visibleServices(cards).map((c) => (
             <article key={c.heading} className="feature-card group relative bg-surface border border-divider rounded-5xl p-6 sm:p-7 hover:border-primary/40 transition-colors duration-500 shadow-sm hover:shadow-xl hover:shadow-primary/10">
               <div className="flex items-center justify-between mb-6">
                 <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">{c.eyebrow}</span>
@@ -154,7 +155,7 @@ function WhyUs() {
           </Reveal>
           <Reveal delay={160}>
             <ul className="mt-6 space-y-3">
-              {bullets.map((b, i) => (
+              {visibleServiceText(bullets).map((b, i) => (
                 <li key={i} className="flex items-start gap-3 text-ink text-[15px] sm:text-base">
                   <span className="mt-0.5 h-6 w-6 shrink-0 rounded-full bg-primary/10 text-primary-dark flex items-center justify-center"><Check className="h-3.5 w-3.5" strokeWidth={3} /></span>
                   <span className="[&_a]:text-primary-dark [&_a]:font-medium [&_a]:underline [&_a]:decoration-primary/30 [&_a]:underline-offset-4">{renderMd(b, `why-b${i}`)}</span>
@@ -185,7 +186,7 @@ function WhyUs() {
       </div>
 
       <div className="max-w-7xl mx-auto mt-16 sm:mt-24 grid lg:grid-cols-2 gap-8 lg:gap-12">
-        {more.map((p, i) => (
+        {visibleServiceText(more).map((p, i) => (
           <Reveal key={i} delay={(i % 2) * 100} className="prose-template">
             <div className="flex gap-4">
               <span className="font-mono text-[10px] text-primary/50 pt-1.5 shrink-0">0{i + 1}</span>
@@ -232,7 +233,7 @@ function ProService() {
           </Reveal>
         </div>
         <div className="lg:col-span-7 grid sm:grid-cols-2 gap-5">
-          {paras.map((p, i) => (
+          {visibleServiceText(paras).map((p, i) => (
             <Reveal key={i} delay={i * 90}>
               <div className="h-full rounded-4xl bg-white/[0.04] border border-white/10 p-6 hover:bg-white/[0.07] transition-colors duration-500">
                 <span className="font-mono text-[10px] text-white/30 uppercase tracking-widest">0{i + 1}</span>

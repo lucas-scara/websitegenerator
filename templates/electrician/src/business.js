@@ -4,6 +4,7 @@ export const BUSINESS = {
   street: 'Entre em contato para confirmar a área atendida', zip: '', city: '', cvr: '', authNumber: '', ean: '',
   hours: [['Disponibilidade', 'Consulte-nos']], hoursNote: 'Entre em contato para combinar um horário.',
   certLine: 'Serviços elétricos para residências e empresas.', facebook: '', facebookPageId: '', privacy: '', cookies: '', elfsightClass: '', mapQuery: '',
+  enabled_services: [],
   ...input,
   address: [input.street, input.zip, input.city].filter(Boolean).join(', ') || 'Entre em contato para confirmar a área atendida',
   domain: window.location.origin + (window.WEBSITE_BASE || ''),

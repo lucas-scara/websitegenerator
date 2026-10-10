@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Building2, Home, ArrowRight, Siren, Plug, Hammer, Wrench, BatteryCharging, ShieldAlert, Box, Zap, Layers, HousePlus, LayoutGrid } from 'lucide-react'
 import { useSEO } from '../lib/useSEO.js'
 import { HOME_SERVICES } from '../site.js'
+import { visibleServices } from '../services.js'
 import Reveal from '../lib/Reveal.jsx'
 import PageHero from '../components/PageHero.jsx'
 import ServicesGrid from '../components/ServicesGrid.jsx'
@@ -66,7 +67,7 @@ export default function ServicesPage() {
           <SectionHeading eyebrow={"Nossos serviços"} title={"Soluções elétricas,"} flourish={"em um só lugar."} className="mb-12" />
           <ServicesGrid items={HOME_SERVICES} />
           <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-divider rounded-4xl overflow-hidden border border-divider">
-            {ALL.map((s, i) => (
+            {visibleServices(ALL).map((s, i) => (
               <Reveal key={s.href} delay={(i % 3) * 60}>
                 <Link to={s.href} className="group flex h-full items-start gap-4 bg-white p-6 hover:bg-background transition-colors">
                   <span className="h-10 w-10 shrink-0 rounded-2xl bg-primary/10 text-primary-dark flex items-center justify-center group-hover:bg-primary group-hover:text-deep transition-colors"><s.Icon className="h-5 w-5" strokeWidth={2.2} /></span>

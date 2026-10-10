@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { REDIRECTS } from './site.js'
+import { serviceEnabled } from './services.js'
 import ScrollToTop from './lib/ScrollToTop.jsx'
 import Navbar from './components/Navbar.jsx'
 import Footer from './components/Footer.jsx'
@@ -52,7 +53,7 @@ export default function App() {
         <Route path="/inspiration" element={<ReferencesPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
-        {CONTENT_PAGES.map((p) => (
+        {CONTENT_PAGES.filter((p) => serviceEnabled(p.path)).map((p) => (
           <Route key={p.path} path={p.path} element={<ContentPage data={p} />} />
         ))}
         {Object.entries(REDIRECTS).map(([from, to]) => (

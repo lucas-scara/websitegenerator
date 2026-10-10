@@ -1,10 +1,11 @@
 import { asset } from './business.js'
 import { BUSINESS } from './business.js'
+import { serviceEnabled, visibleServices } from './services.js'
 export const SITE = BUSINESS
 
 
 /* Primary navigation — mirrors the original site's menu hierarchy */
-export const NAV = [
+const ALL_NAV = [
   { label: "Início", href: '/' },
   {
     label: "Serviços",
@@ -40,9 +41,13 @@ export const NAV = [
   { label: "Sobre", href: '/about' },
   { label: "Contato", href: '/contact' },
 ]
+export const NAV = ALL_NAV.map((item) => item.children ? {
+  ...item,
+  children: visibleServices(item.children).map((child) => child.children ? { ...child, children: visibleServices(child.children) } : child),
+} : item)
 
 /* Footer menu — identical items/labels to the original footer (legacy hrefs resolved to their redirect targets) */
-export const FOOTER_MENU = [
+export const FOOTER_MENU = visibleServices([
   { label: "Início", href: '/' },
   { label: "Serviços", href: '/services' },
   { label: "Reforma completa", href: '/renovations' },
@@ -54,13 +59,13 @@ export const FOOTER_MENU = [
   { label: "Ampliações", href: '/extensions' },
   { label: "Orçamentos", href: '/pricing' },
   { label: "Contato", href: '/contact' },
-]
+])
 
 /* Local landing pages */
 export const AREAS = { elektriker: [{label: 'Serviços elétricos na região', href: '/contact'}], installatoer: [], renovering: [] }
 
 /* The six service cards from the original front page (labels, blurbs, images and targets verbatim) */
-export const HOME_SERVICES = [
+export const HOME_SERVICES = visibleServices([
   {
     title: "Reparos elétricos",
     text: "Converse conosco sobre falhas, quedas de energia e necessidades elétricas em casa.",
@@ -109,7 +114,7 @@ export const HOME_SERVICES = [
     alt: "Luminárias decorativas — imagem ilustrativa",
     icon: 'Plug',
   },
-]
+])
 
 /* Project gallery (from /inspiration) */
 export const GALLERY = [
@@ -117,11 +122,11 @@ export const GALLERY = [
   { src: asset("/images/outdoor-lighting.jpg"), alt: "Iluminação de jardim — imagem ilustrativa", category: "Áreas externas" },
   { src: asset("/images/lamp-detail.jpg"), alt: "Detalhe de luminária — imagem ilustrativa", category: "Iluminação" },
   { src: asset("/images/interior.jpg"), alt: "Iluminação de cozinha — imagem ilustrativa", category: "Interiores" },
-  { src: asset("/images/ev-charging.jpg"), alt: "Recarga de veículo elétrico — imagem ilustrativa", category: "Recarga de veículos elétricos" },
+  { src: asset("/images/ev-charging.jpg"), alt: "Recarga de veículo elétrico — imagem ilustrativa", category: "Recarga de veículos elétricos", service: '/ev-charging' },
   { src: asset("/images/cafe-lighting.jpg"), alt: "Luminárias de vidro — imagem ilustrativa", category: "Iluminação" },
   { src: asset("/images/house-dusk.jpg"), alt: "Casa ao anoitecer — imagem ilustrativa", category: "Áreas externas" },
-]
-export const GALLERY_FILTERS = ["Todos", "Iluminação", "Interiores", "Áreas externas", "Recarga de veículos elétricos"]
+].filter((item) => !item.service || serviceEnabled(item.service))
+export const GALLERY_FILTERS = ["Todos", ...new Set(GALLERY.map((item) => item.category))]
 
 export const TRUST_STATS = [
   { value: 'Cuidado', label: 'em cada detalhe' },

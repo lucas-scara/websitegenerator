@@ -2,15 +2,16 @@ import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ArrowRight, CheckCircle2, ShieldCheck, Star, Phone } from 'lucide-react'
 import { SITE } from '../site.js'
+import { serviceEnabled } from '../services.js'
 
 const TOPICS = [
-  "Problemas elétricos / queda de energia",
-  "Instalação elétrica",
-  "Reforma elétrica / ampliação",
-  "Carregador para veículo elétrico",
-  "Manutenção elétrica / vistoria",
-  "Troca de quadro elétrico",
-  "Outro",
+  { label: "Problemas elétricos / queda de energia", path: '/electrical-repairs' },
+  { label: "Instalação elétrica", path: '/electrical-installation' },
+  { label: "Reforma elétrica / ampliação", path: '/rewiring' },
+  { label: "Carregador para veículo elétrico", path: '/ev-charging' },
+  { label: "Manutenção elétrica / vistoria", path: '/maintenance' },
+  { label: "Troca de quadro elétrico", path: '/consumer-units' },
+  { label: "Outro" },
 ]
 
 function Field({ label, name, type = 'text', required, value, onChange, placeholder, autoComplete, compact }) {
@@ -121,7 +122,7 @@ export default function QuoteForm({ variant = 'full', id, title, subtitle }) {
             className={`w-full bg-background border border-divider rounded-2xl px-4 ${hero ? 'py-3' : 'py-3.5'} text-ink focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition font-body text-[15px] ${form.topic ? '' : 'text-muted/70'}`}
           >
             <option value="">{"Escolha um serviço (opcional)"}</option>
-            {TOPICS.map((t) => <option key={t} value={t}>{t}</option>)}
+            {TOPICS.filter((topic) => !topic.path || serviceEnabled(topic.path)).map((topic) => <option key={topic.label} value={topic.label}>{topic.label}</option>)}
           </select>
         </label>
         <label className="block">

@@ -2,10 +2,15 @@
 
 ## Gerar a prévia
 
-Use `python3 tools/quick_site.py templates` para listar modelos. O único modelo atual é `electrician`, adequado somente a eletricistas. Preserve layout, imagens ilustrativas e rotas. Por empresa, personalize apenas nome, telefone, e-mail, rua, cidade, CEP e cor da marca. Não invente preços, horários, certificações, avaliações, equipe ou projetos.
+Use `python3 tools/quick_site.py templates` para listar modelos. O único modelo atual é `electrician`, adequado somente a eletricistas. Preserve layout, imagens ilustrativas e rotas. Por empresa, personalize nome, telefone, e-mail, rua, cidade, CEP, cor da marca e `enabled_services`. Não invente preços, horários, certificações, avaliações, equipe ou projetos.
+
+Os IDs permitidos estão em `templates/electrician/services.json`. Ative **somente** serviços confirmados no site original ou outra fonte verificável da própria empresa. Registre, em notas privadas da execução, cada ID ativado e a URL/trecho que o comprova. Ausência de evidência significa serviço desativado; não use imagens ilustrativas nem textos deste template como prova. Chamadas antigas sem `enabled_services` continuam aceitas e geram uma prévia sem serviços específicos ativados. O filtro cobre menus, cartões, textos, formulário, galeria e páginas de serviço; uma URL direta de serviço desativado exibe a página não encontrada. Todas as prévias incluem `noindex, nofollow`.
 
 ```sh
 ./website --template electrician --name 'Elétrica Exemplo' --theme-color '#2563eb' --phone '+55 11 99999-9999' --email 'contato@exemplo.com.br' --street 'Rua Exemplo, 10' --city 'São Paulo' --zip '01000-000'
+
+# Somente após conferir e registrar a fonte de cada serviço:
+./website --template electrician --name 'Elétrica Exemplo' --phone '+55 11 99999-9999' --enabled-services electrical-repairs maintenance
 ```
 
 Nome e pelo menos um contato público verificado são obrigatórios; endereço e CEP são opcionais. Registre fontes. A saída fica em `runs/quick/ID/site/`, com manifesto ao lado. O gerador cria cópia isolada do build preparado, sem `npm` por empresa. Valide nome, contatos, layout e navegação. O formulário da prévia é demonstrativo e não envia mensagens.

@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -36,5 +37,29 @@ class QuickSiteTests(unittest.TestCase):
     def test_stale_template_requires_preparation(self):
         with patch.object(quick,'fingerprint',return_value='changed'):
             with self.assertRaisesRegex(ValueError,'preparation'):quick.create({'name':'Business','phone':'123456789'})
+
+    def test_services_are_explicit_validated_and_isolated(self):
+        base = {'name': 'Empresa', 'phone': '123456789'}
+        self.assertEqual(quick.validate(base)[1]['enabled_services'], [])
+        for enabled in ('ev-charging', ['unknown'], ['ev-charging', 'ev-charging'], [1]):
+            with self.assertRaisesRegex(ValueError, 'enabled_services'):
+                quick.validate({**base, 'enabled_services': enabled})
+        with tempfile.TemporaryDirectory() as folder:
+            a = quick.create({**base, 'enabled_services': ['electrical-repairs']}, folder)
+            b = quick.create({**base, 'enabled_services': ['electrical-repairs', 'ev-charging']}, folder)
+            self.assertEqual(a['business']['enabled_services'], ['electrical-repairs'])
+            self.assertEqual(b['business']['enabled_services'], ['electrical-repairs', 'ev-charging'])
+            self.assertNotIn('ev-charging', (Path(a['site'])/'business.js').read_text())
+            self.assertIn('ev-charging', (Path(b['site'])/'business.js').read_text())
+
+    def test_catalog_covers_every_service_page(self):
+        content = quick.TEMPLATES['electrician']['path'] / 'src/content'
+        paths = set()
+        for page in content.glob('*.js'):
+            match = re.search(r'"path": "(/[^\"]+)"', page.read_text())
+            self.assertIsNotNone(match, page.name)
+            paths.add(match.group(1))
+        catalog = json.loads((quick.TEMPLATES['electrician']['path'] / 'services.json').read_text())
+        self.assertEqual(set(catalog.values()), paths)
 
 if __name__=='__main__':unittest.main()
