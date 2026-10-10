@@ -32,6 +32,13 @@ API = 'https://api.firecrawl.dev/v2/scrape'
 EXCLUDED = {'.git', '.vercel', 'node_modules', 'dist', '.next', '__pycache__', '.DS_Store'}
 
 
+class ResponseLimitError(ValueError):
+    def __init__(self, status, url):
+        super().__init__('Response exceeds byte limit')
+        self.status = status
+        self.url = url
+
+
 def clean_url(url):
     parts = urlsplit(url)
     if parts.scheme not in ('http', 'https') or not parts.hostname:
@@ -80,13 +87,19 @@ class PinnedHTTP(http.client.HTTPConnection):
         self.sock = socket.create_connection((self.ip, self.port), self.timeout)
 
 
-def fetch(url, *, limit, method='GET', body=None, headers=None, redirects=4):
+def fetch(url, *, limit, method='GET', body=None, headers=None, redirects=4,
+          timeout=None, include_status=False, allow_http_errors=False,
+          accepted_types=None, forbid_downgrade=False, reject_credentials=False):
     """Validate every redirect and connect to the validated IP (DNS rebinding safe)."""
     for hop in range(redirects + 1):
+        if reject_credentials and (urlsplit(url).username or urlsplit(url).password):
+            raise ValueError('URL credentials blocked')
         url, ip, port = public_target(url)
         parts = urlsplit(url)
         cls = PinnedHTTPS if parts.scheme == 'https' else PinnedHTTP
         connection = cls(parts.hostname, port, ip)
+        if timeout is not None:
+            connection.timeout = timeout
         try:
             request_headers = {'User-Agent': 'WebsitePreviewAssets/1.0', 'Accept-Encoding': 'identity'}
             request_headers.update(headers or {})
@@ -98,17 +111,26 @@ def fetch(url, *, limit, method='GET', body=None, headers=None, redirects=4):
                 location = response.getheader('Location')
                 if not location:
                     raise ValueError('Redirect missing location')
-                url = urljoin(url, location)
+                next_url = urljoin(url, location)
+                if forbid_downgrade and parts.scheme == 'https' and urlsplit(next_url).scheme != 'https':
+                    raise ValueError('Insecure redirect blocked')
+                url = next_url
                 continue
-            if response.status != 200:
+            if response.status != 200 and not allow_http_errors:
                 raise ValueError(f'HTTP status {response.status}')
+            content_type = response.getheader('Content-Type', '')
+            if response.status != 200 or (accepted_types is not None and
+                                          content_type.split(';', 1)[0].strip().lower() not in accepted_types):
+                result = (b'', content_type, url)
+                return (*result, response.status) if include_status else result
             length = response.getheader('Content-Length')
             if length and int(length) > limit:
-                raise ValueError('Response exceeds byte limit')
+                raise ResponseLimitError(response.status, url)
             content = response.read(limit + 1)
             if len(content) > limit:
-                raise ValueError('Response exceeds byte limit')
-            return content, response.getheader('Content-Type', ''), url
+                raise ResponseLimitError(response.status, url)
+            result = (content, content_type, url)
+            return (*result, response.status) if include_status else result
         finally:
             connection.close()
     raise ValueError('Redirect limit reached')
