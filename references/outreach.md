@@ -1,55 +1,39 @@
-# Friendly outreach and a single submit attempt
+# Contato comercial: simulação por padrão
 
-Albert has already consented to the prewritten default message below and its submission through each qualifying business's original contact form when he requests a real batch. The standing consent in [SKILL.md](../SKILL.md#starting-a-run) covers the fixed English message, substituting only the verified preview URL and the business name in the optional subject; do not ask for message approval again. Complete the full workflow and record the result. A later dry-run/review-only instruction or withdrawal of consent overrides this authorization. Include the verified preview link in the first message. Use the same English wording every time; keep Albert's name, phone and email exact. Translate only if Albert explicitly requests it. Don't mimic a customer requesting service.
+O fork brasileiro não herda qualquer autorização de envio do autor original. Antes de um contato real, Lucas precisa autorizar um lote específico (segmento, cidade e volume), definir e-mail e telefone comerciais e aprovar a mensagem final. Até lá, prepare o texto e os campos em simulação, sem clicar em Enviar. O dashboard apenas registra e exibe dados; não envia mensagens.
 
-## Default message
+## Mensagem base em pt-BR
 
-Subject if requested: `I made a website preview for [Business]`
+Assunto, se necessário: `Prévia de site para [Empresa]`
 
-> Hey!
+> Olá! Sou Lucas Scaranello, da scarasoft. Preparei uma prévia de site para [Empresa] com base nas informações públicas do seu negócio.
 >
-> Your website is decent, but looks a little old.
-> I made an updated one.
+> Você pode avaliá-la aqui: [URL pública verificada]
 >
-> You can take a look here: [verified preview URL]
+> Se houver interesse em conversar sobre o projeto, responda pelo contato comercial [e-mail comercial] ou [telefone comercial].
 >
-> The website is totally free — you just pay for hosting.
->
-> If you'd like help setting it up, text me on <YOUR_PHONE> or email albert@shiney.ai.
->
-> Best,
-> Albert
+> scarasoft — Lucas Scaranello
 
-Copy this message exactly, changing only the verified preview URL and the business name in the optional subject. Do not add an observed issue, 'I checked your website', SEO claims, custom praise, or a rewritten opening. Visual qualification findings remain internal evidence; 'looks a little old' describes visual appearance, not the site's actual age. Keep the free-website/paid-hosting offer and sender details above. Do not spin messages or send follow-ups to hit a quota.
+Use apenas nome da empresa, prévia e contatos verificados. Não prometa preço, gratuidade, hospedagem, resultados ou disponibilidade. Não descreva o site atual como antigo, nem simule um pedido de serviço. A assinatura já foi aprovada; o e-mail e telefone comerciais ainda precisam ser definidos pelo responsável.
 
-## Confirmation classification
+## Verificação antes da abordagem
 
-Ordinary authorized website-proposal outreach with public business contact details and a public preview link does not automatically require per-form confirmation. Follow the active tool policy for routine low-impact communication. If a particular form creates a legal commitment, discloses sensitive information, or triggers an explicit approval review, apply that specific rule and report its source. Do not claim the browser rejected an action unless a tool actually returned that rejection. Never work around a real restriction or repeat a submission with an uncertain outcome.
+Confirme no site original um formulário com campo de mensagem e botão de envio, adequado a uma proposta comercial. Guarde a URL e os campos observados. Links de e-mail/telefone, formulários de newsletter, avaliação de cliente ou solicitação de orçamento de serviço não são elegíveis. Respeite avisos de não solicitação e opt-out. CAPTCHA visível e campos que exigem fatos ou compromissos não verificados levam ao [fallback manual](manual-outreach.md). Não contorne bloqueios nem marque consentimentos opcionais.
 
-## Check the form before building
+Reabra o formulário antes de preencher. Use nome completo Lucas Scaranello e somente e-mail/telefone comerciais configurados localmente. Nunca use o e-mail do commit como substituto automático. Salve a mensagem exata em `runs/JOB_ID/outreach.txt` e confira remetente, URL pública, formulário e prévia antes de qualquer ação de envio.
 
-During qualification, use [Firecrawl screening](firecrawl-scouting.md) of the original website’s contact page, falling back to browser inspection for ambiguous/embedded forms, and confirm a form suitable for a website proposal, including a message field and submit control. Save its URL as `contact_url` and record the observed fields and any restrictions in the qualification evidence. Email/phone listings, newsletter signups and customer-review forms do not qualify. If no usable form exists but the business otherwise qualifies, follow [Manual outreach](manual-outreach.md): still build, deploy and verify the site, prepare the message and verified contact details, then mark manual. Apply the form rules below during this check, then recheck the saved form before sending.
+## Autorização técnica e tentativa única
 
-## Form operation
-
-1. Inspect the original contact page in the worker's own browser tab. Prefer its general enquiry form. Albert also authorizes inspection-request forms for this website offer: clearly state this is a website proposal, not an inspection request; leave optional appointment dates and pest categories blank. Respect a visible no-solicitation/opt-out notice; save a skipped result. Do not fabricate a pest problem or book a paid service; do not use forms requiring unsupported facts or commitments; prepare manual outreach for an otherwise eligible business.
-2. Use Albert Shiney in a full-name field, Albert for first name and Shiney for surname. Supply <YOUR_PHONE> and albert@shiney.ai in corresponding fields. For a required business or service-location address, use the prospect's verified publicly listed company address verbatim (from its website or Google result); record the source with the outreach evidence. Never present that address as Albert's personal or sender address, and do not invent an address, account or consent. Leave visible CAPTCHA challenges untouched and route the qualified business to manual outreach after completing its website. Do not check newsletter/marketing-consent boxes. An invisible anti-bot badge alone is not a challenge; stop if a challenge appears.
-
-3. Save `runs/JOB_ID/outreach.txt` with the exact final message and record the form URL. Fill and inspect the form before reserving the attempt. Check that fields show the correct sender, fixed message and verified URL.
-4. Immediately before submitting, atomically reserve:
+`contact-begin` falha por padrão. Para um lote expressamente autorizado por Lucas, registre localmente `data/outreach-authorization.json` (ignorado pelo Git) com `mode: "live"`, `approved_by: "Lucas Scaranello"`, `batch_id`, `industry`, `city` e `max_contacts` iguais ao escopo aprovado. Configure `BR_COMMERCIAL_EMAIL` e `BR_COMMERCIAL_PHONE` no ambiente local. O comando confere o lote, escopo, limite, assinatura e contatos da mensagem antes de reservar a tentativa. O arquivo técnico não substitui a autorização humana.
 
 ```sh
-python3 tools/control.py contact-begin --job JOB_ID --worker WORKER_ID --message-file runs/JOB_ID/outreach.txt --form-url 'https://business.example/contact'
+python3 tools/control.py contact-begin --job JOB_ID --worker WORKER_ID --message-file runs/JOB_ID/outreach.txt --form-url 'https://empresa.example/contato'
 ```
 
-This rejects duplicate/reserved attempts, missing qualification, failed QA and unverified previews. If reservation fails, do not submit. Then click Submit **once**.
-
-5. Record actual outcome:
+Somente depois de uma reserva válida e da autorização específica, clique em Enviar **uma vez**. Registre exatamente o resultado observado:
 
 ```sh
-python3 tools/control.py contact-finish --job JOB_ID --worker WORKER_ID --status submitted --evidence 'Clicked Submit once; observed result: ...; screenshot stored at ...'
+python3 tools/control.py contact-finish --job JOB_ID --worker WORKER_ID --status submitted --evidence 'Clique único; confirmação observada ...'
 ```
 
-Use `submitted` after the single submit action, marking the job `complete` and moving on. Record exactly what happened (confirmation, cleared form, or no confirmation); completion means the outreach action is done, not proof of delivery. Do not wait for explicit acceptance. If a visible CAPTCHA or validation error prevents submission before reservation, follow the manual-outreach command for the ready website. After reservation, use `contact-finish --status blocked` when it is certain no submit action occurred; `contacting` cannot transition to `skipped`. Keep the reservation and never make this prospect retryable. If it is unknown whether the submit action occurred at all (e.g. crash during the action), use `uncertain`. Never resend completed or ambiguous attempts, and do not switch to email/SMS without a separate instruction.
-
-For CAPTCHA encountered before reservation, use `manual-outreach` after public verification, preserving the preview and evidence. Do not mark an otherwise qualified prospect skipped for its contact method. Resolve ordinary address requirements with the verified company address above; do not mark a job blocked merely because a form asks for that address.
+`submitted` indica ação de envio, não entrega confirmada. Se houver dúvida sobre o clique ou resultado, use `uncertain` e nunca tente novamente. Se for certo que nenhum clique ocorreu após a reserva, use `blocked`; a reserva continua registrada. Quando não houver formulário elegível antes da reserva, use `manual-outreach`, sem marcar como enviada. Não troque para e-mail, SMS ou WhatsApp automaticamente.

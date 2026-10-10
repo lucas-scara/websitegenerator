@@ -13,7 +13,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATES = {'electrician': {'name': 'Electrician · base design', 'path': ROOT / 'templates/electrician'}}
+TEMPLATES = {'electrician': {'name': 'Eletricista · design base', 'path': ROOT / 'templates/electrician'}}
 
 
 def fingerprint(template):

@@ -19,6 +19,7 @@ from quick_site import create as create_quick_site, TEMPLATES
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = Path(os.environ.get('REVAMP_DB', ROOT / 'data' / 'revamp.sqlite3'))
+OUTREACH_AUTH_FILE = ROOT / 'data' / 'outreach-authorization.json'
 STAGES = ['queued', 'reviewing', 'extracting', 'building', 'checking', 'deploying', 'ready', 'contacting', 'complete', 'sent', 'uncertain', 'blocked', 'skipped', 'manual']
 NEXT = {'queued': ['reviewing'], 'reviewing': ['extracting'], 'extracting': ['building'], 'building': ['checking'], 'checking': ['building', 'deploying'], 'deploying': ['checking', 'ready'], 'ready': ['contacting'], 'contacting': ['complete', 'sent', 'uncertain', 'blocked']}
 
@@ -215,11 +216,38 @@ def update(jid, worker, stage=None, detail='', fields=None):
         event(c,jid,detail or f'Stage: {new}')
         return {'id':jid,'stage':new}
 
+def require_outreach_authorization(c, job, message):
+    """Fail closed until a specific, locally recorded batch is approved for live contact."""
+    try:
+        auth = json.loads(OUTREACH_AUTH_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        raise ValueError('Live outreach is disabled: local batch authorization is missing')
+    batch = c.execute('SELECT * FROM batches WHERE id=?', (job['batch_id'],)).fetchone()
+    if (not isinstance(auth, dict) or auth.get('mode') != 'live'
+            or auth.get('approved_by') != 'Lucas Scaranello'
+            or auth.get('batch_id') != job['batch_id']
+            or auth.get('industry') != batch['industry']
+            or auth.get('city') != batch['city']
+            or type(auth.get('max_contacts')) is not int
+            or not 1 <= auth['max_contacts'] <= batch['requested_count']):
+        raise ValueError('Live outreach authorization does not match this batch and scope')
+    email = os.environ.get('BR_COMMERCIAL_EMAIL', '').strip()
+    phone = os.environ.get('BR_COMMERCIAL_PHONE', '').strip()
+    if not email or not phone or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+        raise ValueError('Approved commercial email and phone must be configured locally')
+    if 'scarasoft — Lucas Scaranello' not in message or email not in message or phone not in message:
+        raise ValueError('Message must contain the approved signature and configured commercial contacts')
+    attempts = c.execute('SELECT COUNT(*) FROM submissions JOIN jobs ON jobs.id=submissions.job_id WHERE jobs.batch_id=?',
+                         (job['batch_id'],)).fetchone()[0]
+    if attempts >= auth['max_contacts']:
+        raise ValueError('Authorized contact limit reached')
+
 def contact_begin(jid,worker,message,form_url):
     if not message.strip(): raise ValueError('Message is empty')
     domain(form_url)
     with connect() as c:
         j=own(c,jid,worker); data=json.loads(j['data'])
+        require_outreach_authorization(c, j, message)
         if data.get('outreach_mode') == 'manual':
             raise ValueError('This job is routed to manual outreach; do not submit automatically')
         if j['stage']!='ready' or data.get('qa_passed') is not True or data.get('preview_verified') is not True or not j['reason']:

@@ -1,11 +1,11 @@
 {
   "template": "templates/electrician",
-  "template_name": "Electrician \u00b7 English template",
+  "template_name": "Eletricista · modelo brasileiro",
   "template_edit_policy": "business-details-and-theme-only",
   "dashboard_port": 4310,
-  "batch_size": 5,
+  "batch_size": 3,
   "requested_workers": 5,
-  "vercel_scope": "albertshineys-projects",
+  "vercel_scope": "",
   "vercel_cli": [
     "pnpm",
     "dlx",
@@ -15,19 +15,20 @@
   "max_scrape_pages_per_business": 5,
   "max_discovery_candidates": 20,
   "sender": {
-    "name": "Albert Shiney",
-    "phone": "<YOUR_PHONE>",
-    "email": "albert@shiney.ai",
-    "first_name": "Albert",
-    "last_name": "Shiney"
+    "name": "Lucas Scaranello",
+    "phone": "",
+    "email": "",
+    "first_name": "Lucas",
+    "last_name": "Scaranello",
+    "signature": "scarasoft — Lucas Scaranello"
   },
   "outreach": {
-    "submit_by_default": true,
+    "submit_by_default": false,
     "include_preview_link": true,
-    "language": "en",
-    "offer": "Website is free; the business pays for hosting.",
+    "language": "pt-BR",
+    "offer": "Prévia para avaliação; condições comerciais a combinar.",
     "skip_required_surname": false,
-    "allow_inspection_forms": true,
+    "allow_inspection_forms": false,
     "skip_captchas": true,
     "complete_after_submit": true,
     "message_mode": "fixed"
@@ -39,7 +40,7 @@
   "default_template": "electrician",
   "templates": {
     "electrician": {
-      "name": "Electrician \u00b7 base design",
+      "name": "Eletricista · design base",
       "path": "templates/electrician"
     }
   },
