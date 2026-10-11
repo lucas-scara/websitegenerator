@@ -9,7 +9,7 @@ Leia primeiro [AGENTS.md](AGENTS.md) e o [roadmap](docs/ROADMAP-MVP-BR-24H.md). 
 
 ## Iniciar um lote
 
-Para operação real, obtenha segmento, cidade/estado e volume da solicitação atual ou de um lote escolhido no dashboard. O padrão é 3 empresas. Use `electrician` para eletricistas e `serralheria` para serralherias; segmentos sem perfil próprio não têm template (não reutilize um perfil incompatível). Antes de pesquisa externa, confira `python3 tools/control.py state`, o template preparado, as ferramentas Firecrawl/Vercel e o escopo Vercel configurado localmente. Não use valores ou credenciais do autor original. O e-mail de commit não é contato comercial.
+Para operação real, obtenha segmento, cidade/estado e volume da solicitação atual ou de um lote escolhido no dashboard. O padrão é 3 empresas. Use `electrician` para eletricistas, `serralheria` para serralherias e `climatizacao` para ar-condicionado; segmentos sem perfil próprio não têm template (não reutilize um perfil incompatível). Antes de pesquisa externa, confira `python3 tools/control.py state`, o template preparado, as ferramentas Firecrawl/Vercel e o escopo Vercel configurado localmente. Não use valores ou credenciais do autor original. O e-mail de commit não é contato comercial.
 
 Inicie `python3 tools/control.py serve --port 4310` se o painel ainda não servir `/api/state`. A ação “Enfileirar lote” só salva a solicitação. O coordenador deve executá-la explicitamente. Para lotes com várias cidades, siga [coordenação paralela](skills/local-business-revamp-parallel/SKILL.md) quando houver agentes disponíveis; caso contrário, execute o mesmo fluxo sequencialmente.
 

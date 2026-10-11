@@ -20,6 +20,7 @@ ENGINE = ROOT / 'templates/electrician'  # one visual engine; every segment is a
 TEMPLATES = {
     'electrician': {'name': 'Eletricista · design base', 'path': ENGINE, 'segment': 'electrician', 'dist': 'dist'},
     'serralheria': {'name': 'Serralheria · design base', 'path': ENGINE, 'segment': 'serralheria', 'dist': 'dist-serralheria'},
+    'climatizacao': {'name': 'Climatização · design base', 'path': ENGINE, 'segment': 'climatizacao', 'dist': 'dist-climatizacao'},
 }
 
 

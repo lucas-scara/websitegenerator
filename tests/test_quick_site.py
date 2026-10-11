@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ from unittest.mock import patch
 
 spec=importlib.util.spec_from_file_location('quick_site',Path(__file__).parents[1]/'tools/quick_site.py')
 quick=importlib.util.module_from_spec(spec);spec.loader.exec_module(quick)
+ENGINE_PUBLIC=Path(__file__).parents[1]/'templates/electrician/public'
 
 class QuickSiteTests(unittest.TestCase):
     def test_isolation_escaping_and_no_build_per_business(self):
@@ -186,6 +188,65 @@ class SerralheriaProfileTests(unittest.TestCase):
             with self.subTest(term=term):
                 self.assertNotIn(term, text)
         self.assertFalse((dist / 'images' / 'electrician').exists())
+
+
+class ClimatizacaoProfileTests(unittest.TestCase):
+    def test_profile_is_valid_and_defaults_are_minimal(self):
+        prof = quick.profile('climatizacao')
+        self.assertEqual(prof['segment']['id'], 'climatizacao')
+        self.assertEqual(prof['segment']['default_services'], ['split-installation', 'preventive-maintenance', 'aircon-cleaning', 'diagnostics-repair'])
+        self.assertTrue(set(prof['segment']['default_services']) <= set(prof['catalog']))
+        self.assertRegex(prof['segment']['default_theme_color'], r'^#[0-9a-f]{6}$')
+        for path in prof['catalog'].values():
+            self.assertRegex(path, r'^/[a-z0-9-]+$')
+            self.assertNotRegex(path, r'split|installation|maintenance|cleaning|diagnostics|relocation|piping|commercial')
+        self.assertFalse(set(prof['catalog']) & set(quick.profile('electrician')['catalog']))
+        self.assertFalse(set(prof['catalog']) & set(quick.profile('serralheria')['catalog']))
+
+    def test_preset_covers_catalog_without_invented_claims(self):
+        text = (quick.profile('climatizacao')['folder'] / 'preset.js').read_text()
+        for service_id in quick.profile('climatizacao')['catalog']:
+            self.assertIn("'%s':" % service_id, text)
+        for term in ('projetos realizados', 'garantia', '24h', '24 horas', 'certificad', 'R$', 'autorizada', 'econom', 'elimina', 'urgên', 'diagnóstico remoto'):
+            with self.subTest(term=term):
+                self.assertNotIn(term, text.lower())
+
+    def test_stock_photos_are_free_and_labelled_illustrative(self):
+        folder = quick.profile('climatizacao')['folder']
+        for item in json.loads((folder / 'stock-images.json').read_text()):
+            self.assertEqual(item['license'], 'https://unsplash.com/license')
+            self.assertNotIn('plus.unsplash.com', item['image'])
+            self.assertTrue((ENGINE_PUBLIC / item['file']).exists())
+        for alt in re.findall(r"alt: '([^']+)'", (folder / 'preset.js').read_text()):
+            self.assertIn('imagem ilustrativa', alt)
+
+    def test_climatizacao_site_uses_its_own_build_and_defaults(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(quick.subprocess, 'run', side_effect=AssertionError('Unexpected build')):
+            home = quick.create({'name': 'Clima Teste', 'phone': '(14) 99712-3456', 'city': 'Bauru', 'state': 'SP', 'template': 'climatizacao'}, folder)
+            site = Path(home['site'])
+            business = (site / 'business.js').read_text()
+            self.assertIn('#0284c7', business)
+            for service_id in quick.profile('climatizacao')['segment']['default_services']:
+                self.assertIn(service_id, business)
+            self.assertNotIn('ev-charging', business)
+            self.assertNotIn('metal-gates', business)
+            self.assertNotIn('eletricista', (site / 'index.html').read_text().lower())
+            self.assertFalse((site / 'images' / 'electrician').exists())
+            self.assertFalse((site / 'images' / 'serralheria').exists())
+
+    def test_other_segments_ids_are_rejected_for_climatizacao(self):
+        for bad in ('ev-charging', 'metal-gates'):
+            with self.assertRaisesRegex(ValueError, 'enabled_services'):
+                quick.validate({'name': 'X', 'phone': '123456789', 'template': 'climatizacao', 'enabled_services': [bad]})
+
+    def test_climatizacao_build_does_not_ship_other_segments(self):
+        dist = quick.profile('climatizacao')['dist']
+        text = '\n'.join(p.read_text(errors='ignore') for p in dist.rglob('*') if p.suffix in ('.js', '.html', '.css'))
+        for term in ('Eletricista', 'Quadro de distribuição', 'Portões de ferro', '/images/electrician', '/images/serralheria'):
+            with self.subTest(term=term):
+                self.assertNotIn(term, text)
+        self.assertFalse((dist / 'images' / 'electrician').exists())
+        self.assertFalse((dist / 'images' / 'serralheria').exists())
 
 
 if __name__=='__main__':unittest.main()
