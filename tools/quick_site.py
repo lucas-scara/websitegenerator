@@ -22,6 +22,7 @@ TEMPLATES = {
     'serralheria': {'name': 'Serralheria · design base', 'path': ENGINE, 'segment': 'serralheria', 'dist': 'dist-serralheria'},
     'climatizacao': {'name': 'Climatização · design base', 'path': ENGINE, 'segment': 'climatizacao', 'dist': 'dist-climatizacao'},
     'chaveiros': {'name': 'Chaveiros · design base', 'path': ENGINE, 'segment': 'chaveiros', 'dist': 'dist-chaveiros'},
+    'vidracaria': {'name': 'Vidraçaria · design base', 'path': ENGINE, 'segment': 'vidracaria', 'dist': 'dist-vidracaria'},
 }
 
 

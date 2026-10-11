@@ -1,0 +1,28 @@
+{
+  "id": "vidracaria",
+  "default_theme_color": "#0e7490",
+  "schema_type": "LocalBusiness",
+  "mark": {
+    "outline": "M10 13h20v24H10zM20 13v24M10 25h20",
+    "accent": "M38 11l1.6 4.4L44 17l-4.4 1.6L38 23l-1.6-4.4L32 17l4.4-1.6z"
+  },
+  "noun": "Vidraçaria",
+  "activity": "serviços de vidraçaria",
+  "seo_title": "{noun} em {city} | {name}",
+  "seo_title_no_city": "{noun} | {name}",
+  "seo_description": "{name}: {activity} em {city}. Conheça os serviços e peça seu orçamento.",
+  "seo_description_no_city": "{name}: {activity}. Conheça os serviços e peça seu orçamento.",
+  "legacy_paths": {
+    "/services": "/servicos",
+    "/contact": "/contato",
+    "/about": "/",
+    "/pricing": "/contato"
+  },
+  "default_services": [
+    "shower-enclosures",
+    "mirrors",
+    "glass-doors",
+    "glass-replacement"
+  ],
+  "hero_image": "/images/vidracaria/hero.jpg"
+}
