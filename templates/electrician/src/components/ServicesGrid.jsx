@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Siren, HousePlus, Hammer, Wrench, BatteryCharging, Plug, Gauge, Zap, Box, ShieldAlert, Layers, LayoutGrid } from 'lucide-react'
+import { ArrowRight, Siren, HousePlus, Hammer, Wrench, BatteryCharging, Plug, Gauge, Zap, Box, ShieldAlert, Layers, LayoutGrid, DoorClosed, DoorOpen, Fence, Flame, Ruler, Construction, Radio, Hand, Grid3x3, Footprints, Snowflake, Fan, Sparkles, ClipboardCheck, Building2, Cable, ThermometerSnowflake, KeyRound, Lock, LockKeyhole, Car, Vault, Smartphone, ShowerHead, RectangleVertical, Square, PanelTop, AppWindow, Frame, Umbrella, Blinds, Warehouse, House, Tent, Droplets } from 'lucide-react'
 import Reveal from '../lib/Reveal.jsx'
 
-const ICONS = { Siren, HousePlus, Hammer, Wrench, BatteryCharging, Plug, Gauge, Zap, Box, ShieldAlert, Layers, LayoutGrid }
+const ICONS = { Siren, HousePlus, Hammer, Wrench, BatteryCharging, Plug, Gauge, Zap, Box, ShieldAlert, Layers, LayoutGrid, DoorClosed, DoorOpen, Fence, Flame, Ruler, Construction, Radio, Hand, Grid3x3, Footprints, Snowflake, Fan, Sparkles, ClipboardCheck, Building2, Cable, ThermometerSnowflake, KeyRound, Lock, LockKeyhole, Car, Vault, Smartphone, ShowerHead, RectangleVertical, Square, PanelTop, AppWindow, Frame, Umbrella, Blinds, Warehouse, House, Tent, Droplets }
 
 /* Photo service cards built from the resolved service list. */
 export default function ServicesGrid({ items, className = '' }) {
@@ -13,7 +13,7 @@ export default function ServicesGrid({ items, className = '' }) {
         return (
           <Reveal key={s.href} delay={(i % 3) * 100}>
             <Link to={s.href} className="group relative block rounded-4xl overflow-hidden bg-deep text-white h-[380px] sm:h-[420px] shadow-lg shadow-deep/10 hover:shadow-2xl hover:shadow-primary/20 transition-shadow duration-500">
-              <img src={s.image} alt={s.alt} loading="lazy" className="absolute inset-0 w-full h-full object-cover transition-transform duration-[1400ms] ease-out group-hover:scale-[1.06]" />
+              {s.image ? <img src={s.image} alt={s.alt} loading="lazy" className="absolute inset-0 w-full h-full object-cover transition-transform duration-[1400ms] ease-out group-hover:scale-[1.06]" /> : <div className="absolute inset-0 bg-gradient-to-br from-primary-dark/70 via-deep to-deep grid-bg" />}
               <div className="absolute inset-0 bg-gradient-to-t from-deep via-deep/45 to-deep/5 group-hover:via-deep/60 transition-colors duration-500" />
               <div className="absolute top-5 left-5 h-11 w-11 rounded-2xl bg-white/12 backdrop-blur-md border border-white/20 flex items-center justify-center group-hover:bg-primary group-hover:border-primary transition-colors duration-500">
                 <Icon className="h-5 w-5" strokeWidth={2.2} />

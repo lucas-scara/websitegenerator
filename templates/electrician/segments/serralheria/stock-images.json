@@ -1,0 +1,79 @@
+[
+  {
+    "file": "images/serralheria/hero.jpg",
+    "source": "https://unsplash.com/photos/tXJhAFVOHVk",
+    "image": "https://images.unsplash.com/photo-1598302936625-6075fbd98dd7?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  },
+  {
+    "file": "images/serralheria/portao.jpg",
+    "source": "https://unsplash.com/photos/ctocCqfZqpQ",
+    "image": "https://images.unsplash.com/photo-1595010062424-d8d136f64176?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  },
+  {
+    "file": "images/serralheria/solda.jpg",
+    "source": "https://unsplash.com/photos/9Q_pLLP_jmA",
+    "image": "https://images.unsplash.com/photo-1455165814004-1126a7199f9b?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  },
+  {
+    "file": "images/serralheria/estrutura.jpg",
+    "source": "https://unsplash.com/photos/Ws8SCmDS9mw",
+    "image": "https://images.unsplash.com/photo-1683470157212-cd4005549fce?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  },
+  {
+    "file": "images/serralheria/manutencao.jpg",
+    "source": "https://unsplash.com/photos/ZkvJnta6bAI",
+    "image": "https://images.unsplash.com/photo-1698664683348-f9f35b809821?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  },
+  {
+    "file": "images/serralheria/grade.jpg",
+    "source": "https://unsplash.com/photos/QfpHD4iMbac",
+    "image": "https://images.unsplash.com/photo-1769479826038-61156237f442?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  },
+  {
+    "file": "images/serralheria/janela.jpg",
+    "source": "https://unsplash.com/photos/e-NLQqK_yU8",
+    "image": "https://images.unsplash.com/photo-1787450000180-dc3926d11c97?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  },
+  {
+    "file": "images/serralheria/guarda-corpo.jpg",
+    "source": "https://unsplash.com/photos/fdrOia6mnjA",
+    "image": "https://images.unsplash.com/photo-1652584067038-22fc934aabd9?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  },
+  {
+    "file": "images/serralheria/corrimao.jpg",
+    "source": "https://unsplash.com/photos/nZne5xy4sVg",
+    "image": "https://images.unsplash.com/photo-1786788684855-06c9b81ff2fb?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  },
+  {
+    "file": "images/serralheria/escada.jpg",
+    "source": "https://unsplash.com/photos/-PJ5nQryiPs",
+    "image": "https://images.unsplash.com/photo-1626200319898-ed2f597773e9?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  },
+  {
+    "file": "images/serralheria/sob-medida.jpg",
+    "source": "https://unsplash.com/photos/R-O9N8sCCbw",
+    "image": "https://images.unsplash.com/photo-1762787863017-d4328c20b9c1?auto=format&fit=crop&w=1800&q=85",
+    "license": "https://unsplash.com/license",
+    "use": "Illustrative stock photograph"
+  }
+]

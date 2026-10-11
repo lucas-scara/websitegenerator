@@ -10,11 +10,25 @@ import ServicesGrid from '../components/ServicesGrid.jsx'
 import FAQ from '../components/FAQ.jsx'
 import Reviews from '../components/Reviews.jsx'
 import { Btn, ContactBtns } from '../components/Buttons.jsx'
+import ProcessStack from '../components/ProcessStack.jsx'
 import ContactSection from '../components/ContactSection.jsx'
+import { HeroMark } from '../components/Logo.jsx'
 
 const listLabels = (items) => {
   const names = items.map((s) => s.label.toLowerCase())
   return names.length > 1 ? names.slice(0, -1).join(', ') + ' e ' + names.at(-1) : names[0] || ''
+}
+
+/* Verified proof points. Payment joins the proof bar only when there is another fact beside it;
+   alone it becomes a hero pill, so the bar never shows a single sparse item on desktop. */
+function proofFacts() {
+  const base = [
+    SITE.google && { Icon: Star, value: SITE.google.rating.toFixed(1).replace('.', ','), label: SITE.google.count ? `${SITE.google.count} avaliações no Google` : 'nota no Google', href: SITE.google.url },
+    SITE.foundedYear && { Icon: CalendarCheck, value: `Desde ${SITE.foundedYear}`, label: 'em atividade' },
+  ].filter(Boolean)
+  const pay = SITE.paymentMethods.length > 0
+  if (base.length && pay) return { facts: [...base, { Icon: CreditCard, value: 'Pagamento', label: SITE.paymentMethods.join(', ') }], payPill: false }
+  return { facts: base, payPill: pay }
 }
 
 function Hero() {
@@ -22,12 +36,23 @@ function Hero() {
   const chips = [
     AREA && { Icon: MapPin, text: `Atende ${AREA}` },
     SITE.hours && { Icon: Clock, text: SITE.hours },
+    proofFacts().payPill && { Icon: CreditCard, text: `Pagamento: ${SITE.paymentMethods.join(', ')}` },
   ].filter(Boolean)
+
+  // Long single words (e.g. "Ar-condicionado") would overflow the hero column at the largest size.
+  const heroTitle = SITE.city ? SEGMENT.hero.title : SEGMENT.hero.titleNoCity
+  const longest = Math.max(...heroTitle.split(/[\s-]+/).map((w) => w.length))
+  const titleSize = longest >= 12 ? 'text-4xl sm:text-6xl lg:text-7xl' : 'text-5xl sm:text-7xl lg:text-8xl'
 
   return (
     <section className="relative min-h-[88svh] lg:min-h-[100dvh] w-full overflow-hidden bg-deep rounded-b-5xl sm:rounded-b-6xl">
       <div className="absolute inset-0">
-        <img src={asset(SEGMENT.hero.image)} alt={SEGMENT.hero.alt} className="w-full h-full object-cover object-center" fetchPriority="high" />
+        {SEGMENT.hero.image
+          ? <img src={asset(SEGMENT.hero.image)} alt={SEGMENT.hero.alt} className="w-full h-full object-cover object-center" fetchPriority="high" />
+          : <>
+              <div className="absolute inset-0 grid-bg opacity-20" />
+              <HeroMark className="absolute -right-16 top-1/2 -translate-y-1/2 h-[120%] max-h-[900px] w-auto opacity-60" />
+            </>}
         <div className="absolute inset-0 bg-gradient-to-tr from-deep/95 via-deep/65 to-primary/20" />
         <div className="absolute inset-0 bg-gradient-to-t from-deep via-deep/30 to-transparent" />
       </div>
@@ -45,8 +70,8 @@ function Hero() {
             </p>
           )}
           <h1 className="font-display font-extrabold text-white leading-[0.95] tracking-tight mt-5">
-            <span className="rise block text-5xl sm:text-7xl lg:text-8xl">{SITE.city ? SEGMENT.hero.title : SEGMENT.hero.titleNoCity}</span>
-            <span className="rise block font-serif italic font-medium text-primary-light text-5xl sm:text-7xl lg:text-8xl mt-1" style={{ lineHeight: '0.95' }}>
+            <span className={`rise block ${titleSize}`}>{heroTitle}</span>
+            <span className={`rise block font-serif italic font-medium text-primary-light ${titleSize} mt-1`} style={{ lineHeight: '0.95' }}>
               {SITE.city ? `em ${SITE.city}` : SEGMENT.hero.flourishNoCity}
             </span>
           </h1>
@@ -80,11 +105,7 @@ function Hero() {
 
 /* Short proof strip — only facts supplied with the business data. */
 function Facts() {
-  const facts = [
-    SITE.google && { Icon: Star, value: SITE.google.rating.toFixed(1).replace('.', ','), label: SITE.google.count ? `${SITE.google.count} avaliações no Google` : 'nota no Google', href: SITE.google.url },
-    SITE.foundedYear && { Icon: CalendarCheck, value: `Desde ${SITE.foundedYear}`, label: 'em atividade' },
-    SITE.paymentMethods.length > 0 && { Icon: CreditCard, value: 'Pagamento', label: SITE.paymentMethods.join(', ') },
-  ].filter(Boolean)
+  const { facts } = proofFacts()
   if (!facts.length) return null
   return (
     <section className="relative z-20 -mt-10 sm:-mt-12 mb-10 sm:mb-14 px-4 sm:px-10 lg:px-16">
@@ -108,28 +129,6 @@ function Facts() {
   )
 }
 
-function Process() {
-  return (
-    <section className="relative py-24 sm:py-32 px-6 sm:px-10 lg:px-16 bg-deep text-white overflow-hidden rounded-6xl mx-2 sm:mx-4">
-      <div className="absolute inset-0 grid-bg opacity-20" />
-      <div className="absolute -top-20 -right-20 h-96 w-96 rounded-full bg-primary/20 blur-3xl" />
-      <div className="relative max-w-7xl mx-auto">
-        <SectionHeading eyebrow="Como pedir" title="Seu orçamento" flourish="em três passos." dark />
-        <ol className="mt-14 grid md:grid-cols-3 gap-5">
-          {SEGMENT.process.map((step, i) => (
-            <Reveal key={step.title} as="li" delay={i * 100} className="rounded-4xl bg-white/[0.05] border border-white/10 p-7">
-              <span className="font-display font-extrabold text-5xl text-primary-light/40">{String(i + 1).padStart(2, '0')}</span>
-              <h3 className="font-display font-bold text-2xl mt-4">{step.title}</h3>
-              <p className="text-white/70 mt-3 leading-relaxed">{step.text}</p>
-            </Reveal>
-          ))}
-        </ol>
-        <ContactBtns className="mt-12" onDark />
-      </div>
-    </section>
-  )
-}
-
 /* FAQ answered strictly from business data; questions without data are left out. */
 function homeFaq() {
   const how = SITE.whatsapp
@@ -147,7 +146,7 @@ function homeFaq() {
 function localBusinessLd() {
   return {
     '@context': 'https://schema.org',
-    '@type': 'Electrician',
+    '@type': SEGMENT.schema_type,
     name: SITE.name,
     url: SITE.domain + '/',
     ...(SITE.phoneHref && { telephone: SITE.phoneHref.replace('tel:', '') }),
@@ -158,7 +157,7 @@ function localBusinessLd() {
 }
 
 export default function HomePage() {
-  useSEO({ title: SEO_TITLE, description: SEO_DESCRIPTION, path: '/', image: asset(SEGMENT.hero.image) })
+  useSEO({ title: SEO_TITLE, description: SEO_DESCRIPTION, path: '/', image: SEGMENT.hero.image && asset(SEGMENT.hero.image) })
   return (
     <>
       <script type="application/ld+json">{JSON.stringify(localBusinessLd())}</script>
@@ -175,7 +174,7 @@ export default function HomePage() {
           </div>
         </section>
       )}
-      <Process />
+      <ProcessStack />
       <Reviews />
       {SITE.about && (
         <section className="py-24 sm:py-32 px-6 sm:px-10 lg:px-16">

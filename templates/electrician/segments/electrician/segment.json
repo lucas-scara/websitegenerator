@@ -1,0 +1,40 @@
+{
+  "id": "electrician",
+  "default_theme_color": "#2563eb",
+  "schema_type": "Electrician",
+  "hero_image": "/images/electrician/hero.jpg",
+  "mark": {
+    "outline": "M11 23.5 24 12l13 11.5M14 21.5V37h20V21.5",
+    "accent": "M25.6 19.5 20 28.5h5l-1.6 8L30 26.5h-5.2z"
+  },
+  "noun": "Eletricista",
+  "activity": "serviços elétricos",
+  "seo_title": "{noun} em {city} | {name}",
+  "seo_title_no_city": "{noun} | {name}",
+  "seo_description": "{name}: {activity} em {city}. Conheça os serviços e peça seu orçamento.",
+  "seo_description_no_city": "{name}: {activity}. Conheça os serviços e peça seu orçamento.",
+  "legacy_paths": {
+    "/services": "/servicos",
+    "/contact": "/contato",
+    "/about": "/",
+    "/pricing": "/contato",
+    "/inspiration": "/servicos",
+    "/electrical-repairs": "/reparos-eletricos",
+    "/electrical-installation": "/instalacoes-eletricas",
+    "/consumer-units": "/troca-de-quadro-eletrico",
+    "/electrical-enclosures": "/instalacao-de-quadro-eletrico",
+    "/rcd-protection": "/dispositivo-dr",
+    "/rewiring": "/reforma-eletrica",
+    "/maintenance": "/manutencao-eletrica",
+    "/electrical-contracting": "/projetos-eletricos",
+    "/extensions": "/ampliacoes",
+    "/renovations": "/reforma-completa",
+    "/ev-charging": "/carregador-veicular"
+  },
+  "default_services": [
+    "electrical-repairs",
+    "electrical-installation",
+    "maintenance",
+    "rewiring"
+  ]
+}

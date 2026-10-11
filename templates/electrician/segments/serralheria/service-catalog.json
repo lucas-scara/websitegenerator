@@ -1,0 +1,14 @@
+{
+  "metal-gates": "/portoes-de-ferro",
+  "automatic-gates": "/portoes-automaticos",
+  "gate-maintenance": "/manutencao-de-portoes",
+  "grilles": "/grades-de-protecao",
+  "railings": "/guarda-corpos",
+  "handrails": "/corrimaos",
+  "metal-stairs": "/escadas-metalicas",
+  "metal-doors-windows": "/portas-e-janelas-de-metal",
+  "metal-structures": "/estruturas-metalicas",
+  "fences": "/cercas-metalicas",
+  "welding-repairs": "/soldas-e-reparos",
+  "custom-metalwork": "/serralheria-sob-medida"
+}

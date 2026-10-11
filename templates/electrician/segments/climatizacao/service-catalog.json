@@ -1,0 +1,10 @@
+{
+  "split-installation": "/instalacao-de-ar-condicionado",
+  "preventive-maintenance": "/manutencao-preventiva",
+  "aircon-cleaning": "/limpeza-de-ar-condicionado",
+  "diagnostics-repair": "/conserto-de-ar-condicionado",
+  "aircon-relocation": "/troca-e-remocao-de-aparelhos",
+  "refrigeration-piping": "/infraestrutura-e-tubulacao",
+  "commercial-hvac": "/climatizacao-comercial",
+  "maintenance-contracts": "/contratos-de-manutencao"
+}

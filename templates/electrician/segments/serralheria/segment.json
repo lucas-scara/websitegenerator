@@ -1,0 +1,28 @@
+{
+  "id": "serralheria",
+  "default_theme_color": "#ea580c",
+  "schema_type": "LocalBusiness",
+  "mark": {
+    "outline": "M12 38V20q0-9 12-9t12 9v18M18 38V19M24 38V13M30 38V19",
+    "accent": "M24 25l3.2 4.2L24 33.4l-3.2-4.2z"
+  },
+  "noun": "Serralheria",
+  "activity": "serralheria",
+  "seo_title": "{noun} em {city} | {name}",
+  "seo_title_no_city": "{noun} | {name}",
+  "seo_description": "{name}: {activity} em {city}. Conheça os serviços e peça seu orçamento.",
+  "seo_description_no_city": "{name}: {activity}. Conheça os serviços e peça seu orçamento.",
+  "legacy_paths": {
+    "/services": "/servicos",
+    "/contact": "/contato",
+    "/about": "/",
+    "/pricing": "/contato"
+  },
+  "default_services": [
+    "metal-gates",
+    "grilles",
+    "railings",
+    "welding-repairs"
+  ],
+  "hero_image": "/images/serralheria/hero.jpg"
+}

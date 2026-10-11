@@ -19,7 +19,7 @@ export default function ServicesPage() {
   return (
     <>
       <PageHero
-        image={SERVICES[0]?.image || asset(SEGMENT.hero.image)}
+        image={SERVICES[0]?.image || (SEGMENT.hero.image && asset(SEGMENT.hero.image))}
         imageAlt={SERVICES[0]?.alt || SEGMENT.hero.alt}
         crumbs={[{ label: 'Início', href: '/' }, { label: 'Serviços', href: '/servicos' }]}
         eyebrow={`${SEGMENT.activity}${where}`}

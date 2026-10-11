@@ -1,0 +1,28 @@
+{
+  "id": "chaveiros",
+  "default_theme_color": "#b45309",
+  "schema_type": "Locksmith",
+  "mark": {
+    "outline": "M15 16a8 8 0 1 0 0 16a8 8 0 1 0 0-16zM23 24h19M35 24v6M41 24v5",
+    "accent": "M15 21.5a2.5 2.5 0 1 1 0 5a2.5 2.5 0 1 1 0-5z"
+  },
+  "noun": "Chaveiro",
+  "activity": "serviços de chaveiro",
+  "seo_title": "{noun} em {city} | {name}",
+  "seo_title_no_city": "{noun} | {name}",
+  "seo_description": "{name}: {activity} em {city}. Conheça os serviços e peça seu orçamento.",
+  "seo_description_no_city": "{name}: {activity}. Conheça os serviços e peça seu orçamento.",
+  "legacy_paths": {
+    "/services": "/servicos",
+    "/contact": "/contato",
+    "/about": "/",
+    "/pricing": "/contato"
+  },
+  "default_services": [
+    "door-opening",
+    "key-duplication",
+    "lock-replacement",
+    "car-keys"
+  ],
+  "hero_image": "/images/chaveiros/hero.jpg"
+}
