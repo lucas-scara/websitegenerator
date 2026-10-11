@@ -1,5 +1,6 @@
 {
   "id": "electrician",
+  "default_theme_color": "#2563eb",
   "noun": "Eletricista",
   "activity": "serviços elétricos",
   "seo_title": "{noun} em {city} | {name}",

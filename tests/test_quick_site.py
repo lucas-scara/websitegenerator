@@ -106,6 +106,11 @@ class QuickSiteTests(unittest.TestCase):
             self.assertEqual(result['business']['theme_color'],'#7c3aed')
             self.assertIn('#7c3aed',(Path(result['site'])/'business.js').read_text())
 
+    def test_default_theme_color_applies_when_not_detected(self):
+        self.assertEqual(quick.DEFAULT_THEME_COLOR, '#2563eb')
+        for data in ({'name': 'Test', 'phone': '123456789'}, {'name': 'Test', 'phone': '123456789', 'theme_color': ''}):
+            self.assertEqual(quick.validate(data)[1]['theme_color'], '#2563eb')
+
     def test_stale_template_requires_preparation(self):
         with patch.object(quick,'fingerprint',return_value='changed'):
             with self.assertRaisesRegex(ValueError,'preparation'):quick.create({'name':'Business','phone':'123456789'})

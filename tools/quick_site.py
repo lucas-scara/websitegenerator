@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = {'electrician': {'name': 'Eletricista · design base', 'path': ROOT / 'templates/electrician'}}
 SERVICE_CATALOG = json.loads((TEMPLATES['electrician']['path'] / 'service-catalog.json').read_text())
 SEGMENT = json.loads((TEMPLATES['electrician']['path'] / 'segment.json').read_text())
+DEFAULT_THEME_COLOR = SEGMENT['default_theme_color']
 UF = set('AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split())
 
 
@@ -82,7 +83,9 @@ def validate(data):
     template = data.get('template', 'electrician')
     if template not in TEMPLATES:
         raise ValueError('Choose an available template: electrician')
-    color = data.get('theme_color', '#7cc0f7')
+    color = data.get('theme_color', DEFAULT_THEME_COLOR)
+    if color == '':  # not detected: the segment default applies
+        color = DEFAULT_THEME_COLOR
     if not isinstance(color, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', color):
         raise ValueError('Theme color must be a six-digit hex color, e.g. #2563eb')
     services = data.get('enabled_services', [])
@@ -214,7 +217,7 @@ def main():
     p = commands.add_parser('create', help='Generate a ready-to-host website')
     p.add_argument('--template', choices=TEMPLATES, default='electrician')
     p.add_argument('--name', required=True)
-    p.add_argument('--theme-color', dest='theme_color', default='#7cc0f7', help='Brand color as #RRGGBB')
+    p.add_argument('--theme-color', dest='theme_color', default=DEFAULT_THEME_COLOR, help='Brand color as #RRGGBB (default: segment default; see tools/brand_color.py)')
     p.add_argument('--enabled-service', dest='enabled_services', action='append', default=[], choices=SERVICE_CATALOG, help='Repeat for each verified service')
     for field in ('phone', 'email', 'street', 'city', 'state', 'zip', 'cnpj', 'hours', 'service_area', 'instagram', 'about', 'whatsapp'):
         p.add_argument('--' + field.replace('_', '-'), dest=field, default='')
