@@ -36,6 +36,13 @@ const state = text(input.state).toUpperCase()
 const street = text(input.street)
 const zip = text(input.zip)
 
+/* Operator-approved defaults: Pix and card are always listed; detected methods are added after them.
+   The area falls back to "<city> e região" unless named neighbouring cities were identified. */
+const DEFAULT_PAYMENTS = ['Pix', 'Cartão de crédito']
+const extraPayments = Array.isArray(input.payment_methods) ? input.payment_methods.filter((m) => typeof m === 'string' && m.trim()).map((m) => m.trim()) : []
+const norm = (v) => v.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+const paymentMethods = [...DEFAULT_PAYMENTS, ...extraPayments.filter((m) => !DEFAULT_PAYMENTS.some((d) => norm(d) === norm(m)))]
+
 export const BUSINESS = {
   name: text(input.name) || 'Sua empresa',
   phone: phone ? formatPhone(phone) : '',
@@ -49,12 +56,12 @@ export const BUSINESS = {
   state,
   place: [city, state].filter(Boolean).join('/'),
   address: street ? [street, [city, state].filter(Boolean).join(' - '), zip].filter(Boolean).join(', ') : '',
-  serviceArea: text(input.service_area),
+  serviceArea: text(input.service_area) || (city ? `${city} e região` : ''),
   hours: text(input.hours),
   cnpj: text(input.cnpj),
   about: text(input.about),
   instagram: text(input.instagram),
-  paymentMethods: Array.isArray(input.payment_methods) ? input.payment_methods.filter((m) => typeof m === 'string' && m.trim()) : [],
+  paymentMethods,
   foundedYear: Number.isInteger(input.founded_year) ? input.founded_year : null,
   google: input.google_rating && input.google_reviews_url ? { rating: Number(input.google_rating), count: Number(input.google_reviews_count) || 0, url: input.google_reviews_url } : null,
   reviews: Array.isArray(input.reviews) ? input.reviews.filter((r) => r && r.author && r.text && r.source_url) : [],

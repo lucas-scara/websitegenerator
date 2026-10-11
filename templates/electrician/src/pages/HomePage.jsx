@@ -20,7 +20,7 @@ const listLabels = (items) => {
 function Hero() {
   const featured = SERVICES.slice(0, 3)
   const chips = [
-    AREA && { Icon: MapPin, text: SITE.serviceArea ? `Atende ${SITE.serviceArea}` : SITE.place },
+    AREA && { Icon: MapPin, text: `Atende ${AREA}` },
     SITE.hours && { Icon: Clock, text: SITE.hours },
   ].filter(Boolean)
 
@@ -87,9 +87,9 @@ function Facts() {
   ].filter(Boolean)
   if (!facts.length) return null
   return (
-    <section className="relative z-20 -mt-10 sm:-mt-12 px-4 sm:px-10 lg:px-16">
-      <Reveal className="max-w-5xl mx-auto glass rounded-4xl shadow-xl shadow-deep/10 px-5 sm:px-8 py-5">
-        <ul className={`grid gap-4 ${['', 'sm:grid-cols-1', 'sm:grid-cols-2', 'sm:grid-cols-3'][facts.length]}`}>
+    <section className="relative z-20 -mt-10 sm:-mt-12 mb-10 sm:mb-14 px-4 sm:px-10 lg:px-16">
+      <Reveal className="max-w-5xl mx-auto bg-white rounded-3xl sm:rounded-4xl border border-ink/[0.06] shadow-2xl shadow-deep/20 px-5 sm:px-8 py-5 sm:py-6">
+        <ul className={`grid gap-5 sm:gap-8 sm:divide-x divide-ink/10 ${['', 'sm:grid-cols-1', 'sm:grid-cols-2', 'sm:grid-cols-3'][facts.length]}`}>
           {facts.map(({ Icon, value, label, href }) => {
             const body = (
               <>
@@ -138,7 +138,7 @@ function homeFaq() {
   return [
     { q: 'Como peço um orçamento?', a: how },
     SERVICES.length > 0 && { q: 'Quais serviços vocês fazem?', a: `${listLabels(SERVICES).replace(/^./, (c) => c.toUpperCase())}. Veja os detalhes na [página de serviços](/servicos).` },
-    AREA && { q: 'Onde vocês atendem?', a: SITE.serviceArea ? `Atendemos ${SITE.serviceArea}.` : `Estamos em ${SITE.place}. Informe seu bairro ao pedir o orçamento.` },
+    AREA && { q: 'Onde vocês atendem?', a: `Atendemos ${AREA}. Informe seu bairro ao pedir o orçamento.` },
     SITE.hours && { q: 'Qual é o horário de atendimento?', a: SITE.hours + '.' },
     SITE.paymentMethods.length > 0 && { q: 'Quais formas de pagamento são aceitas?', a: SITE.paymentMethods.join(', ') + '.' },
   ].filter(Boolean)
