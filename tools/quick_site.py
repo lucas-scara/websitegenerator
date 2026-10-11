@@ -88,7 +88,8 @@ def validate(data):
         color = DEFAULT_THEME_COLOR
     if not isinstance(color, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', color):
         raise ValueError('Theme color must be a six-digit hex color, e.g. #2563eb')
-    services = data.get('enabled_services', [])
+    # Key absent: the segment's basic services apply. An explicit list (even empty) is honored as given.
+    services = data['enabled_services'] if data.get('enabled_services') is not None else list(SEGMENT['default_services'])
     if not isinstance(services, list) or any(not isinstance(item, str) or item not in SERVICE_CATALOG for item in services) or len(services) != len(set(services)):
         raise ValueError('enabled_services must be a list of unique service IDs from service-catalog.json')
     result = {'theme_color': color.lower(), 'enabled_services': services}
@@ -218,7 +219,8 @@ def main():
     p.add_argument('--template', choices=TEMPLATES, default='electrician')
     p.add_argument('--name', required=True)
     p.add_argument('--theme-color', dest='theme_color', default=DEFAULT_THEME_COLOR, help='Brand color as #RRGGBB (default: segment default; see tools/brand_color.py)')
-    p.add_argument('--enabled-service', dest='enabled_services', action='append', default=[], choices=SERVICE_CATALOG, help='Repeat for each verified service')
+    p.add_argument('--enabled-service', dest='enabled_services', action='append', default=None, choices=SERVICE_CATALOG, help='Repeat for each verified service; omit to use the segment basic services')
+    p.add_argument('--no-services', dest='no_services', action='store_true', help='Announce no specific services')
     for field in ('phone', 'email', 'street', 'city', 'state', 'zip', 'cnpj', 'hours', 'service_area', 'instagram', 'about', 'whatsapp'):
         p.add_argument('--' + field.replace('_', '-'), dest=field, default='')
     p.add_argument('--no-whatsapp', dest='whatsapp', action='store_false', help='The public phone does not use WhatsApp')
@@ -230,7 +232,9 @@ def main():
     try:
         if command == 'prepare': prepare(**args)
         elif command == 'templates': print(json.dumps({k: v['name'] for k, v in TEMPLATES.items()}, indent=2))
-        elif command == 'create': print(json.dumps(create(args), indent=2))
+        elif command == 'create':
+            if args.pop('no_services'): args['enabled_services'] = []
+            print(json.dumps(create(args), indent=2))
         else:
             records = json.loads(args['file'].read_text())
             if not isinstance(records, list): raise ValueError('Batch file must contain a JSON array')

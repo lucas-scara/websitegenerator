@@ -23,7 +23,10 @@ class QuickSiteTests(unittest.TestCase):
             self.assertIn('noindex', (Path(a['site'])/'vercel.json').read_text())
     def test_service_catalog_validation_and_safe_legacy_default(self):
         _, legacy = quick.validate({'name': 'Legacy', 'phone': '123456789'})
-        self.assertEqual(legacy['enabled_services'], [])
+        self.assertEqual(legacy['enabled_services'], quick.SEGMENT['default_services'])
+        self.assertTrue(set(legacy['enabled_services']) <= set(quick.SERVICE_CATALOG))
+        _, none = quick.validate({'name': 'None', 'phone': '123456789', 'enabled_services': []})
+        self.assertEqual(none['enabled_services'], [])
         for services in ('ev-charging', ['unknown'], ['ev-charging', 'ev-charging'], [42]):
             with self.subTest(services=services), self.assertRaisesRegex(ValueError, 'enabled_services'):
                 quick.validate({'name': 'Test', 'phone': '123456789', 'enabled_services': services})

@@ -24,5 +24,11 @@
     "/extensions": "/ampliacoes",
     "/renovations": "/reforma-completa",
     "/ev-charging": "/carregador-veicular"
-  }
+  },
+  "default_services": [
+    "electrical-repairs",
+    "electrical-installation",
+    "maintenance",
+    "rewiring"
+  ]
 }
