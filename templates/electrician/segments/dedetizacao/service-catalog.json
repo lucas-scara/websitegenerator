@@ -1,0 +1,10 @@
+{
+  "pest-control": "/dedetizacao",
+  "cockroaches-ants": "/baratas-e-formigas",
+  "termites": "/cupins",
+  "rodents": "/ratos-e-roedores",
+  "drain-unclogging": "/desentupimento-de-pias-e-ralos",
+  "sewer-unclogging": "/desentupimento-de-esgoto",
+  "grease-trap": "/caixa-de-gordura",
+  "storm-drains": "/ralos-e-canaletas-externos"
+}
