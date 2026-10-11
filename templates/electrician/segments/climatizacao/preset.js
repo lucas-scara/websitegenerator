@@ -15,7 +15,7 @@ export default {
     image: meta.hero_image,
     alt: 'Unidade externa de ar-condicionado em parede de tijolos (imagem ilustrativa)',
   },
-  servicesHeading: { title: 'Serviços de ar-condicionado', flourish: 'para casa e empresa.' },
+  servicesHeading: { title: 'Serviços de ar-condicionado', flourish: 'disponíveis.' },
   process: [
     { title: 'Conte o que precisa', text: 'Descreva o serviço e informe o tipo e a marca do aparelho, se já existir.' },
     { title: 'Envie fotos do local', text: 'Fotos do ambiente, da parede e do ponto da unidade externa ajudam a preparar a avaliação.' },

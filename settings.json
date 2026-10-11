@@ -42,6 +42,30 @@
     "electrician": {
       "name": "Eletricista · design base",
       "path": "templates/electrician"
+    },
+    "serralheria": {
+      "name": "Serralheria · design base",
+      "path": "templates/electrician"
+    },
+    "climatizacao": {
+      "name": "Climatização · design base",
+      "path": "templates/electrician"
+    },
+    "chaveiros": {
+      "name": "Chaveiros · design base",
+      "path": "templates/electrician"
+    },
+    "vidracaria": {
+      "name": "Vidraçaria · design base",
+      "path": "templates/electrician"
+    },
+    "toldos": {
+      "name": "Toldos e coberturas · design base",
+      "path": "templates/electrician"
+    },
+    "dedetizacao": {
+      "name": "Dedetização e desentupimento · design base",
+      "path": "templates/electrician"
     }
   },
   "personalization_fields": [
