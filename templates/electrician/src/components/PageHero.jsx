@@ -1,25 +1,12 @@
-import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { gsap } from 'gsap'
-import { ChevronRight, Zap } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { renderMd } from '../lib/md.jsx'
-import { SmartBtn } from './Buttons.jsx'
+import { ContactBtns } from './Buttons.jsx'
 import QuoteForm from './QuoteForm.jsx'
 import { SITE } from '../site.js'
 
-/* Hero for every inner page: banner photo, breadcrumbs, H1, intro, CTAs and the quote form. */
-export default function PageHero({ image, imageAlt = '', crumbs = [], eyebrow, h1, intro = [], ctas = [], showForm = true, children }) {
-  const ref = useRef(null)
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.fromTo('.ph-item', { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: 'power3.out', stagger: 0.1, delay: 0.1, clearProps: 'opacity,transform' })
-      gsap.fromTo('.ph-form', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 1, ease: 'power3.out', delay: 0.4, clearProps: 'opacity,transform' })
-      // Safety net: never leave above-the-fold content hidden if the ticker is throttled
-      gsap.delayedCall(2.5, () => gsap.set('.ph-item, .ph-form', { clearProps: 'opacity,transform' }))
-    }, ref)
-    return () => ctx.revert()
-  }, [h1])
-
+/* Hero for every inner page: banner photo, breadcrumbs, H1, intro, verified contact CTAs and (desktop) the message composer. */
+export default function PageHero({ image, imageAlt = '', crumbs = [], eyebrow, h1, intro = [], service, showForm = true, children }) {
   const ld = crumbs.length
     ? {
         '@context': 'https://schema.org',
@@ -29,7 +16,7 @@ export default function PageHero({ image, imageAlt = '', crumbs = [], eyebrow, h
     : null
 
   return (
-    <section ref={ref} className="relative overflow-hidden bg-deep text-white rounded-b-5xl sm:rounded-b-6xl">
+    <section className="relative overflow-hidden bg-deep text-white rounded-b-5xl sm:rounded-b-6xl">
       {ld && <script type="application/ld+json">{JSON.stringify(ld)}</script>}
       <div className="absolute inset-0">
         {image && <img src={image} alt={imageAlt} className="w-full h-full object-cover opacity-70" fetchPriority="high" />}
@@ -46,7 +33,7 @@ export default function PageHero({ image, imageAlt = '', crumbs = [], eyebrow, h
       <div className={`relative z-10 max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 pt-28 sm:pt-36 pb-14 sm:pb-20 grid gap-10 lg:gap-14 ${showForm ? 'lg:grid-cols-12 items-start lg:items-center' : ''}`}>
         <div className={showForm ? 'lg:col-span-7' : 'max-w-4xl'}>
           {crumbs.length > 0 && (
-            <nav aria-label={"Breadcrumb"} className="ph-item flex flex-wrap items-center gap-1.5 font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-white/55 mb-6">
+            <nav aria-label={"Breadcrumb"} className="rise flex flex-wrap items-center gap-1.5 font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-white/55 mb-6">
               {crumbs.map((c, i) => (
                 <span key={c.href} className="flex items-center gap-1.5">
                   {i > 0 && <ChevronRight className="h-3 w-3 text-white/30" />}
@@ -56,30 +43,24 @@ export default function PageHero({ image, imageAlt = '', crumbs = [], eyebrow, h
             </nav>
           )}
           {eyebrow && (
-            <p className="ph-item inline-flex items-center gap-2 font-mono text-[10px] sm:text-xs uppercase tracking-[0.25em] text-primary-light mb-5">
-              <Zap className="h-3.5 w-3.5 text-accent" strokeWidth={2.4} /> {eyebrow}
+            <p className="rise inline-flex items-center gap-2 font-mono text-[10px] sm:text-xs uppercase tracking-[0.25em] text-primary-light mb-5">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent" /> {eyebrow}
             </p>
           )}
-          <h1 className="ph-item font-display font-extrabold text-4xl sm:text-5xl lg:text-6xl xl:text-7xl leading-[1.02] tracking-tight text-white">
+          <h1 className="rise font-display font-extrabold text-4xl sm:text-5xl lg:text-6xl xl:text-7xl leading-[1.02] tracking-tight text-white">
             {h1}
           </h1>
           {intro.map((p, i) => (
-            <p key={i} className={`ph-item text-white/75 text-base sm:text-lg leading-relaxed max-w-2xl ${i === 0 ? 'mt-7' : 'mt-4'} [&_a]:text-primary-light [&_a]:underline [&_a]:underline-offset-4 [&_strong]:text-white`}>
+            <p key={i} className={`rise text-white/75 text-base sm:text-lg leading-relaxed max-w-2xl ${i === 0 ? 'mt-7' : 'mt-4'} [&_a]:text-primary-light [&_a]:underline [&_a]:underline-offset-4 [&_strong]:text-white`}>
               {renderMd(p, `intro-${i}`)}
             </p>
           ))}
-          {ctas.length > 0 && (
-            <div className="ph-item mt-8 flex flex-wrap gap-3">
-              {ctas.map((c, i) => (
-                <SmartBtn key={c.href + i} href={c.href} variant={i === 0 ? 'primary' : 'glass'} size="lg">{c.label}</SmartBtn>
-              ))}
-            </div>
-          )}
+          <div className="rise mt-8"><ContactBtns service={service} size="lg" onDark /></div>
           {children}
         </div>
         {showForm && (
-          <div className="ph-form lg:col-span-5">
-            <QuoteForm variant="hero" id="tilbud" />
+          <div className="rise hidden lg:block lg:col-span-5">
+            <QuoteForm id="orcamento-topo" service={service} />
           </div>
         )}
       </div>

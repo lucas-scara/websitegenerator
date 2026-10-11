@@ -134,3 +134,10 @@
 
 /* Theme foreground stays readable for light and dark business colors. */
 .bg-primary.text-deep, .bg-primary.text-white { color: var(--theme-on-primary); }
+
+/* Above-the-fold entrance: pure CSS so content never depends on requestAnimationFrame. */
+.rise { animation: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.rise:nth-child(2) { animation-delay: 0.05s; }
+.rise:nth-child(3) { animation-delay: 0.1s; }
+.rise:nth-child(n+4) { animation-delay: 0.15s; }
+@keyframes rise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }

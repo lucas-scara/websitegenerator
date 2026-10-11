@@ -6,7 +6,7 @@
 
 MVP Brasil em **T0 + 24 horas de janela de execução**: descobrir empresas com sites visualmente fracos → verificar informações e formulário original → gerar site a partir de template preparado → hospedar prévia isolada → verificar URL → fazer **um primeiro contato autônomo**, quando houver autorização do lote e formulário elegível; caso contrário, fallback com e-mail/telefone públicos e contato manual. Dashboard e ledger registram o resultado.
 
-**Não reinventar o produto.** Preservar pesquisa, Firecrawl, coordenador/subagentes, SQLite, dashboard, geração rápida e Vercel. Traduzir textos visíveis, template e abordagem para **pt-BR**; manter nomes internos de código e layout. O template disponível é **somente eletricistas**; piloto inicial com eletricistas, sem usar conteúdo incompatível em outros segmentos. Templates novos = prioridade 2/pós-MVP.
+**Não reinventar o produto.** Preservar pesquisa, Firecrawl, coordenador/subagentes, SQLite, dashboard, geração rápida e Vercel. Traduzir textos visíveis, template e abordagem para **pt-BR**; manter nomes internos de código e layout. O template disponível hoje é **somente eletricistas**; não usar conteúdo incompatível em outros segmentos. A evolução modular multi-segmento foi **autorizada por Lucas em 11/10/2026** conforme `docs/template-modular/` (PR #7): um único motor visual com perfis por segmento, nunca aplicações independentes, entregue em PRs separados (alicerce brasileiro → serralheria → demais perfis).
 
 ## Regras inegociáveis
 
@@ -19,7 +19,7 @@ MVP Brasil em **T0 + 24 horas de janela de execução**: descobrir empresas com 
 7. **Não inventar:** avaliação visual exige evidência observada; não inferir idade por aparência, nem inventar serviços, avaliações, faturamento, preços, disponibilidade, certificações ou resultado de envio.
 8. **Sem execução insegura:** não executar `templates/electrician/scripts/prerender.mjs` no MVP; usar o gerador rápido com build preparado. O script legado tem risco de traversal, listener amplo e Chrome `--no-sandbox`.
 9. **Sem reset destrutivo:** não usar `clear-all` na base real; preservar ledger, identidades, submissões e opt-outs. Não repetir abordagem por perda de histórico.
-10. **MVP estrito:** qualquer mudança precisa (a) viabilizar Brasil, (b) impedir falha relevante, ou (c) provar o fluxo. Fora disso, abrir backlog; sem migração de stack, CRM próprio, backend novo, novos templates ou redesign.
+10. **MVP estrito:** qualquer mudança precisa (a) viabilizar Brasil, (b) impedir falha relevante, ou (c) provar o fluxo. Fora disso, abrir backlog; sem migração de stack, CRM próprio, backend novo ou redesign. Perfis de segmento seguem a exceção registrada em "Decisões posteriores do proprietário".
 
 ## Papéis e entregáveis
 
@@ -57,3 +57,6 @@ Em cada atualização, informar: etapa efetivamente testada, link/evidência qua
 - Contatos comerciais: configurados no `.env` local, sem versionar os valores. A autorização do lote para envio real ainda é necessária.
 - Chave Firecrawl configurada localmente; a consulta de uso autenticou com 1.036 créditos restantes. Nenhuma empresa foi raspada durante essa checagem.
 - Lucas autorizou remover o projeto fictício de demonstração da Vercel e operar localmente. A prévia local não fornece URL pública para mensagem comercial; resolver a publicação antes de contato real com link.
+- **Template modular (11/10/2026):** Lucas autorizou a evolução modular descrita em `docs/template-modular/`. Primeiro o alicerce brasileiro do template base (WhatsApp, CTAs, formulário, textos, SEO, slugs), depois serralheria e demais perfis, cada etapa em PR próprio.
+- **Slugs em português:** rotas públicas dos templates usam slugs em pt-BR (ex.: `/servicos`, `/reparos-eletricos`). Os IDs internos de `service-catalog.json` permanecem estáveis.
+- **WhatsApp presumido:** o telefone público raspado da empresa pode ser tratado como WhatsApp (≈95% dos casos, segundo Lucas). Os CTAs apontam para `wa.me` com esse número normalizado, salvo quando houver número de WhatsApp específico ou indicação explícita de que o número não usa WhatsApp (`whatsapp: false`).

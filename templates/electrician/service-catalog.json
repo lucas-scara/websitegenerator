@@ -1,13 +1,14 @@
 {
-  "electrical-repairs": "/electrical-repairs",
-  "electrical-installation": "/electrical-installation",
-  "rcd-protection": "/rcd-protection",
-  "electrical-enclosures": "/electrical-enclosures",
-  "consumer-units": "/consumer-units",
-  "rewiring": "/rewiring",
-  "electrical-contracting": "/electrical-contracting",
-  "extensions": "/extensions",
-  "renovations": "/renovations",
-  "maintenance": "/maintenance",
-  "ev-charging": "/ev-charging"
+  "electrical-repairs": "/reparos-eletricos",
+  "electrical-installation": "/instalacoes-eletricas",
+  "service-entrance": "/padrao-de-entrada",
+  "consumer-units": "/troca-de-quadro-eletrico",
+  "electrical-enclosures": "/instalacao-de-quadro-eletrico",
+  "rcd-protection": "/dispositivo-dr",
+  "rewiring": "/reforma-eletrica",
+  "maintenance": "/manutencao-eletrica",
+  "electrical-contracting": "/projetos-eletricos",
+  "extensions": "/ampliacoes",
+  "renovations": "/reforma-completa",
+  "ev-charging": "/carregador-veicular"
 }

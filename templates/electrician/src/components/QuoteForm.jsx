@@ -1,167 +1,79 @@
-import { isServiceEnabled } from '../services.js'
 import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
-import { ArrowRight, CheckCircle2, ShieldCheck, Star, Phone } from 'lucide-react'
-import { SITE } from '../site.js'
+import { Mail } from 'lucide-react'
+import { SITE, SERVICES } from '../site.js'
+import { whatsappHref } from '../business.js'
+import { WhatsAppIcon } from './Icons.jsx'
 
-const TOPICS = [
-  { label: "Problemas elétricos / queda de energia", href: "/electrical-repairs" },
-  { label: "Instalação elétrica", href: "/electrical-installation" },
-  { label: "Reforma elétrica / ampliação", href: "/rewiring" },
-  { label: "Carregador para veículo elétrico", href: "/ev-charging" },
-  { label: "Manutenção elétrica / vistoria", href: "/maintenance" },
-  { label: "Troca de quadro elétrico", href: "/consumer-units" },
-  { label: "Outro" },
-]
-
-function Field({ label, name, type = 'text', required, value, onChange, placeholder, autoComplete, compact }) {
+function Field({ label, optional, children }) {
   return (
     <label className="block">
       <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted mb-1.5 block">
-        {label} {required && <span className="text-primary">*</span>}
+        {label} {optional && <span className="normal-case tracking-normal">(opcional)</span>}
       </span>
-      <input
-        type={type}
-        name={name}
-        required={required}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        className={`w-full bg-background border border-divider rounded-2xl px-4 ${compact ? 'py-3' : 'py-3.5'} text-ink placeholder-muted/50 focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition font-body text-[15px]`}
-      />
+      {children}
     </label>
   )
 }
 
-/**
- * Lead-capture form. `variant="hero"` = compact card for the hero, `variant="full"` = contact section.
- * Posts JSON to VITE_FORM_ENDPOINT when configured; otherwise shows a clearly labelled preview state.
+const input = 'w-full bg-background border border-divider rounded-2xl px-4 py-3 text-ink placeholder-muted/60 focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition font-body text-base'
+
+/*
+ * Message composer: the site never receives or stores data. Submitting opens the visitor's own
+ * WhatsApp (or e-mail app) with the text filled in, addressed to the verified business contact.
  */
-export default function QuoteForm({ variant = 'full', id, title, subtitle }) {
-  const hero = variant === 'hero'
-  const { pathname } = useLocation()
-  const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', topic: '', message: '', website: '' })
-  const [status, setStatus] = useState('idle') // idle | sending | sent | error
-  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }))
+export default function QuoteForm({ id, service, title = 'Peça seu orçamento', className = '' }) {
+  const [form, setForm] = useState({ name: '', topic: service || '', place: '', message: '' })
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const channel = SITE.whatsapp ? 'whatsapp' : SITE.email ? 'email' : null
+  if (!channel) return null
 
-  const submit = async (e) => {
+  const compose = () => [
+    `Olá, ${SITE.name}! Meu nome é ${form.name.trim()}.`,
+    form.topic ? `Gostaria de um orçamento para: ${form.topic}.` : 'Gostaria de pedir um orçamento.',
+    form.place.trim() && `Local: ${form.place.trim()}.`,
+    form.message.trim(),
+  ].filter(Boolean).join('\n')
+
+  const submit = (e) => {
     e.preventDefault()
-    if (status === 'sending') return
-    setStatus('sending')
-    try {
-      const endpoint = '' // Speculative previews never send enquiries.
-      if (endpoint && !form.website) {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ ...form, page: pathname, source: 'example.com' }),
-        })
-        if (!res.ok) throw new Error('bad status')
-      } else {
-        setStatus('preview')
-        return
-      }
-      setStatus('sent')
-    } catch {
-      setStatus('error')
-    }
-  }
-
-  const cardCls = hero
-    ? 'bg-white/95 backdrop-blur-xl border border-white/60 rounded-4xl p-5 sm:p-7 shadow-glow'
-    : 'bg-surface border border-divider rounded-5xl p-6 sm:p-10 shadow-xl shadow-primary/5'
-
-  if (status === 'preview') return <div id={id} className={cardCls}><h3 className="font-display text-2xl font-bold">Prévia do formulário</h3><p className="mt-3 text-muted">Esta é uma prévia do site. Nenhuma mensagem foi enviada. Use o telefone ou e-mail exibidos para entrar em contato.</p><button type="button" className="mt-4 underline" onClick={() => setStatus('idle')}>Voltar ao formulário</button></div>
-
-  if (status === 'sent') {
-    return (
-      <div id={id} className={`${cardCls} text-center`}>
-        <div className="py-8 sm:py-12">
-          <div className="h-16 w-16 mx-auto rounded-full bg-primary/15 flex items-center justify-center mb-6">
-            <CheckCircle2 className="h-8 w-8 text-primary-dark" />
-          </div>
-          <h3 className="font-display font-bold text-2xl text-ink mb-3">{"Obrigado pelo contato"}</h3>
-          <p className="text-muted max-w-md mx-auto">{"Para falar sobre o projeto, ligue para"}{' '}
-            <a href={SITE.phoneHref} className="text-primary-dark font-semibold whitespace-nowrap">{SITE.phone}</a>.
-          </p>
-        </div>
-      </div>
-    )
+    const text = compose()
+    const href = channel === 'whatsapp'
+      ? whatsappHref(text)
+      : `mailto:${SITE.email}?subject=${encodeURIComponent('Pedido de orçamento')}&body=${encodeURIComponent(text)}`
+    window.open(href, '_blank', 'noopener')
   }
 
   return (
-    <form id={id} onSubmit={submit} className={cardCls} noValidate={false}>
-      {(title || hero) && (
-        <div className={hero ? 'mb-5' : 'mb-7'}>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="font-display font-bold text-xl sm:text-2xl text-ink leading-tight">
-                {title || "Peça um orçamento"}
-              </h3>
-              <p className="text-muted text-sm mt-1.5">{subtitle || "Formulário demonstrativo — entre em contato por telefone ou e-mail."}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className={`grid sm:grid-cols-2 ${hero ? 'gap-3' : 'gap-5'}`}>
-        <Field label={"Nome"} name="name" required value={form.name} onChange={set('name')} placeholder={"Seu nome"} autoComplete="name" compact={hero} />
-        <Field label={"Telefone"} name="phone" type="tel" required value={form.phone} onChange={set('phone')} placeholder={"Número de telefone"} autoComplete="tel" compact={hero} />
-        <Field label="E-mail" name="email" type="email" required value={form.email} onChange={set('email')} placeholder="you@example.com" autoComplete="email" compact={hero} />
-        <Field label={"Endereço"} name="address" required value={form.address} onChange={set('address')} placeholder={"Rua, CEP e cidade"} autoComplete="street-address" compact={hero} />
+    <form id={id} onSubmit={submit} className={`bg-surface border border-divider rounded-4xl p-6 sm:p-8 shadow-xl shadow-primary/5 text-ink ${className}`}>
+      <h3 className="font-display font-bold text-xl sm:text-2xl leading-tight">{title}</h3>
+      <p className="text-muted text-sm mt-1.5">
+        {channel === 'whatsapp' ? 'Preencha e sua mensagem abre pronta no WhatsApp.' : 'Preencha e sua mensagem abre pronta no seu e-mail.'}
+      </p>
+      <div className="grid gap-4 mt-6">
+        <Field label="Seu nome">
+          <input className={input} name="name" required value={form.name} onChange={set('name')} placeholder="Como podemos chamar você?" autoComplete="given-name" />
+        </Field>
+        {SERVICES.length > 0 && (
+          <Field label="Serviço" optional>
+            <select className={`${input} ${form.topic ? '' : 'text-muted'}`} name="topic" value={form.topic} onChange={set('topic')}>
+              <option value="">Escolha um serviço</option>
+              {SERVICES.map((s) => <option key={s.id} value={s.label}>{s.label}</option>)}
+              <option value="Outro serviço">Outro serviço</option>
+            </select>
+          </Field>
+        )}
+        <Field label="Bairro e cidade" optional>
+          <input className={input} name="place" value={form.place} onChange={set('place')} placeholder={SITE.city ? `Ex.: Centro, ${SITE.city}` : 'Ex.: Centro'} autoComplete="address-level2" />
+        </Field>
+        <Field label="Detalhes" optional>
+          <textarea className={`${input} min-h-[96px] resize-y`} name="message" value={form.message} onChange={set('message')} placeholder="Conte rapidamente o que precisa" />
+        </Field>
       </div>
-
-      <div className={`grid ${hero ? 'gap-3 mt-3' : 'gap-5 mt-5'}`}>
-        <label className="block">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted mb-1.5 block">{"Como podemos ajudar?"}</span>
-          <select
-            name="topic"
-            value={form.topic}
-            onChange={(e) => set('topic')(e.target.value)}
-            className={`w-full bg-background border border-divider rounded-2xl px-4 ${hero ? 'py-3' : 'py-3.5'} text-ink focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition font-body text-[15px] ${form.topic ? '' : 'text-muted/70'}`}
-          >
-            <option value="">{"Escolha um serviço (opcional)"}</option>
-            {TOPICS.filter((t) => !t.href || isServiceEnabled(t.href)).map((t) => <option key={t.label} value={t.label}>{t.label}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted mb-1.5 block">{"Mensagem "}<span className="text-primary">*</span></span>
-          <textarea
-            name="message"
-            required
-            rows={hero ? 3 : 5}
-            value={form.message}
-            onChange={(e) => set('message')(e.target.value)}
-            placeholder={"Descreva brevemente o que você precisa…"}
-            className={`w-full bg-background border border-divider rounded-2xl px-4 ${hero ? 'py-3' : 'py-3.5'} text-ink placeholder-muted/50 focus:border-primary focus:ring-4 focus:ring-primary/15 outline-none transition resize-none font-body text-[15px]`}
-          />
-        </label>
-        {/* honeypot */}
-        <input type="text" name="website" value={form.website} onChange={(e) => set('website')(e.target.value)} className="hidden" tabIndex={-1} autoComplete="off" aria-hidden="true" />
-      </div>
-
-      <div className={`${hero ? 'mt-4' : 'mt-7'} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
-        {!hero && <p className="text-xs text-muted">{"Os campos com * são obrigatórios. Esta prévia não envia mensagens."}</p>}
-        <button
-          type="submit"
-          disabled={status === 'sending'}
-          className={`magnetic-btn group inline-flex items-center justify-center gap-2 bg-primary text-deep font-semibold rounded-full shadow-lg shadow-primary/30 disabled:opacity-60 ${hero ? 'w-full py-3.5' : 'px-7 py-3.5'}`}
-        >
-          {status === 'sending' ? "Enviando…" : hero ? "Pedir orçamento" : 'Enviar'}
-          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2.4} />
-        </button>
-      </div>
-      {status === 'error' && (
-        <p className="mt-3 text-sm text-red-600">{"Não foi possível enviar. Ligue para "}<a href={SITE.phoneHref} className="font-semibold">{SITE.phone}</a>{" ou escreva para "}<a href={SITE.emailHref} className="font-semibold">{SITE.email}</a>.</p>
-      )}
-      {hero && (
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted">
-          <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" />{"Serviços elétricos"}</span>
-          <span className="inline-flex items-center gap-1.5"><Star className="h-3.5 w-3.5 text-accent fill-accent" />{" Comunicação clara"}</span>
-          <a href={SITE.phoneHref} className="inline-flex items-center gap-1.5 hover:text-primary-dark"><Phone className="h-3.5 w-3.5 text-primary" /> {SITE.phone}</a>
-        </div>
-      )}
+      <button type="submit" className={`magnetic-btn mt-6 w-full inline-flex items-center justify-center gap-2 rounded-full font-semibold px-6 py-4 ${channel === 'whatsapp' ? 'bg-whatsapp text-deep hover:bg-whatsapp-dark' : 'bg-primary text-on-primary hover:bg-primary-dark hover:text-white'}`}>
+        {channel === 'whatsapp' ? <WhatsAppIcon className="h-5 w-5" /> : <Mail className="h-5 w-5" />}
+        {channel === 'whatsapp' ? 'Continuar no WhatsApp' : 'Continuar no e-mail'}
+      </button>
+      <p className="text-xs text-muted mt-3 text-center">Este site não envia nem armazena seus dados.</p>
     </form>
   )
 }
