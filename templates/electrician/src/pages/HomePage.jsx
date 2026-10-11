@@ -25,6 +25,11 @@ function Hero() {
     SITE.hours && { Icon: Clock, text: SITE.hours },
   ].filter(Boolean)
 
+  // Long single words (e.g. "Ar-condicionado") would overflow the hero column at the largest size.
+  const heroTitle = SITE.city ? SEGMENT.hero.title : SEGMENT.hero.titleNoCity
+  const longest = Math.max(...heroTitle.split(/[\s-]+/).map((w) => w.length))
+  const titleSize = longest >= 12 ? 'text-4xl sm:text-6xl lg:text-7xl' : 'text-5xl sm:text-7xl lg:text-8xl'
+
   return (
     <section className="relative min-h-[88svh] lg:min-h-[100dvh] w-full overflow-hidden bg-deep rounded-b-5xl sm:rounded-b-6xl">
       <div className="absolute inset-0">
@@ -51,8 +56,8 @@ function Hero() {
             </p>
           )}
           <h1 className="font-display font-extrabold text-white leading-[0.95] tracking-tight mt-5">
-            <span className="rise block text-5xl sm:text-7xl lg:text-8xl">{SITE.city ? SEGMENT.hero.title : SEGMENT.hero.titleNoCity}</span>
-            <span className="rise block font-serif italic font-medium text-primary-light text-5xl sm:text-7xl lg:text-8xl mt-1" style={{ lineHeight: '0.95' }}>
+            <span className={`rise block ${titleSize}`}>{heroTitle}</span>
+            <span className={`rise block font-serif italic font-medium text-primary-light ${titleSize} mt-1`} style={{ lineHeight: '0.95' }}>
               {SITE.city ? `em ${SITE.city}` : SEGMENT.hero.flourishNoCity}
             </span>
           </h1>
