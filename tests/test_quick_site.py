@@ -102,10 +102,11 @@ class QuickSiteTests(unittest.TestCase):
             page = (site / 'index.html').read_text()
             self.assertIn('name="theme-color" content="#e11d48"', page)
             self.assertNotIn('alternate icon', page)
-        logo = (quick.TEMPLATES['electrician']['path'] / 'src/components/Logo.jsx').read_text()
-        for path in ('M11 23.5 24 12l13 11.5M14 21.5V37h20V21.5', 'M25.6 19.5 20 28.5h5l-1.6 8L30 26.5h-5.2z'):
-            self.assertIn(path, logo)
-            self.assertIn(path, quick.render_favicon('#e11d48'))
+        for name in quick.TEMPLATES:
+            mark = json.loads((quick.profile(name)['folder'] / 'segment.json').read_text())['mark']
+            icon = quick.render_favicon('#e11d48', mark)
+            for path in mark.values():
+                self.assertIn(path, icon)
 
     def test_prepared_build_has_no_legacy_or_placeholder_content(self):
         dist = quick.TEMPLATES['electrician']['path'] / 'dist'
@@ -134,5 +135,57 @@ class QuickSiteTests(unittest.TestCase):
     def test_stale_template_requires_preparation(self):
         with patch.object(quick,'fingerprint',return_value='changed'):
             with self.assertRaisesRegex(ValueError,'preparation'):quick.create({'name':'Business','phone':'123456789'})
+
+class SerralheriaProfileTests(unittest.TestCase):
+    def test_profile_is_valid_and_defaults_are_minimal(self):
+        prof = quick.profile('serralheria')
+        self.assertEqual(prof['segment']['id'], 'serralheria')
+        self.assertEqual(prof['segment']['default_services'], ['metal-gates', 'grilles', 'railings', 'welding-repairs'])
+        self.assertTrue(set(prof['segment']['default_services']) <= set(prof['catalog']))
+        self.assertRegex(prof['segment']['default_theme_color'], r'^#[0-9a-f]{6}$')
+        for path in prof['catalog'].values():
+            self.assertRegex(path, r'^/[a-z0-9-]+$')
+            self.assertNotRegex(path, r'metal-|gates|grilles|railings|welding|stairs|fences')
+        self.assertFalse(set(prof['catalog']) & set(quick.profile('electrician')['catalog']))
+
+    def test_preset_covers_catalog_without_invented_claims(self):
+        text = (quick.profile('serralheria')['folder'] / 'preset.js').read_text()
+        for service_id in quick.profile('serralheria')['catalog']:
+            self.assertIn("'%s':" % service_id, text)
+        for term in ('projetos realizados', 'garantia', '24h', '24 horas', 'certificad', 'R$', 'eletric', 'elétric'):
+            with self.subTest(term=term):
+                self.assertNotIn(term, text.lower())
+
+    def test_serralheria_site_uses_its_own_build_and_defaults(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(quick.subprocess, 'run', side_effect=AssertionError('Unexpected build')):
+            home = quick.create({'name': 'Serralheria Teste', 'phone': '(14) 99712-3456', 'city': 'Bauru', 'state': 'SP', 'template': 'serralheria'}, folder)
+            site = Path(home['site'])
+            business = (site / 'business.js').read_text()
+            self.assertIn('#ea580c', business)
+            for service_id in quick.profile('serralheria')['segment']['default_services']:
+                self.assertIn(service_id, business)
+            self.assertNotIn('ev-charging', business)
+            page = (site / 'index.html').read_text()
+            self.assertIn('Serralheria', page)
+            self.assertNotIn('eletricista', page.lower())
+            self.assertFalse((site / 'images' / 'electrician').exists())
+            self.assertIn('M24 25l3.2 4.2L24 33.4l-3.2-4.2z', (site / 'favicon.svg').read_text())
+
+    def test_electrician_service_ids_are_rejected_for_serralheria(self):
+        with self.assertRaisesRegex(ValueError, 'enabled_services'):
+            quick.validate({'name': 'X', 'phone': '123456789', 'template': 'serralheria', 'enabled_services': ['ev-charging']})
+
+    def test_electrician_build_does_not_ship_serralheria_content(self):
+        text = '\n'.join(p.read_text(errors='ignore') for p in quick.profile('electrician')['dist'].rglob('*') if p.suffix in ('.js', '.html'))
+        self.assertNotIn('Portões de ferro', text)
+
+    def test_serralheria_build_does_not_ship_electrician_content(self):
+        dist = quick.profile('serralheria')['dist']
+        text = '\n'.join(p.read_text(errors='ignore') for p in dist.rglob('*') if p.suffix in ('.js', '.html', '.css'))
+        for term in ('Eletricista', 'Quadro de distribuição', 'Electrician', '/images/electrician'):
+            with self.subTest(term=term):
+                self.assertNotIn(term, text)
+        self.assertFalse((dist / 'images' / 'electrician').exists())
+
 
 if __name__=='__main__':unittest.main()

@@ -11,6 +11,7 @@ import FAQ from '../components/FAQ.jsx'
 import Reviews from '../components/Reviews.jsx'
 import { Btn, ContactBtns } from '../components/Buttons.jsx'
 import ContactSection from '../components/ContactSection.jsx'
+import { HeroMark } from '../components/Logo.jsx'
 
 const listLabels = (items) => {
   const names = items.map((s) => s.label.toLowerCase())
@@ -27,7 +28,12 @@ function Hero() {
   return (
     <section className="relative min-h-[88svh] lg:min-h-[100dvh] w-full overflow-hidden bg-deep rounded-b-5xl sm:rounded-b-6xl">
       <div className="absolute inset-0">
-        <img src={asset(SEGMENT.hero.image)} alt={SEGMENT.hero.alt} className="w-full h-full object-cover object-center" fetchPriority="high" />
+        {SEGMENT.hero.image
+          ? <img src={asset(SEGMENT.hero.image)} alt={SEGMENT.hero.alt} className="w-full h-full object-cover object-center" fetchPriority="high" />
+          : <>
+              <div className="absolute inset-0 grid-bg opacity-20" />
+              <HeroMark className="absolute -right-16 top-1/2 -translate-y-1/2 h-[120%] max-h-[900px] w-auto opacity-60" />
+            </>}
         <div className="absolute inset-0 bg-gradient-to-tr from-deep/95 via-deep/65 to-primary/20" />
         <div className="absolute inset-0 bg-gradient-to-t from-deep via-deep/30 to-transparent" />
       </div>
@@ -147,7 +153,7 @@ function homeFaq() {
 function localBusinessLd() {
   return {
     '@context': 'https://schema.org',
-    '@type': 'Electrician',
+    '@type': SEGMENT.schema_type,
     name: SITE.name,
     url: SITE.domain + '/',
     ...(SITE.phoneHref && { telephone: SITE.phoneHref.replace('tel:', '') }),
@@ -158,7 +164,7 @@ function localBusinessLd() {
 }
 
 export default function HomePage() {
-  useSEO({ title: SEO_TITLE, description: SEO_DESCRIPTION, path: '/', image: asset(SEGMENT.hero.image) })
+  useSEO({ title: SEO_TITLE, description: SEO_DESCRIPTION, path: '/', image: SEGMENT.hero.image && asset(SEGMENT.hero.image) })
   return (
     <>
       <script type="application/ld+json">{JSON.stringify(localBusinessLd())}</script>

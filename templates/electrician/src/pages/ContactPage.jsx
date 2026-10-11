@@ -9,12 +9,12 @@ export default function ContactPage() {
     title: `Contato | ${SITE.name}`,
     description: `Fale com ${SITE.name}${SITE.city ? ` em ${SITE.city}` : ''} e peça seu orçamento.`,
     path: '/contato',
-    image: asset(SEGMENT.hero.image),
+    image: SEGMENT.hero.image && asset(SEGMENT.hero.image),
   })
   return (
     <>
       <PageHero
-        image={asset(SEGMENT.hero.image)}
+        image={SEGMENT.hero.image && asset(SEGMENT.hero.image)}
         imageAlt={SEGMENT.hero.alt}
         crumbs={[{ label: 'Início', href: '/' }, { label: 'Contato', href: '/contato' }]}
         eyebrow={AREA ? `Atendimento · ${AREA}` : 'Contato'}

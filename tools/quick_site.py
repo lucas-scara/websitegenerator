@@ -5,6 +5,7 @@ import hashlib
 import html
 import json
 import math
+import os
 from pathlib import Path
 import re
 import shutil
@@ -15,9 +16,28 @@ import unicodedata
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATES = {'electrician': {'name': 'Eletricista · design base', 'path': ROOT / 'templates/electrician'}}
-SERVICE_CATALOG = json.loads((TEMPLATES['electrician']['path'] / 'service-catalog.json').read_text())
-SEGMENT = json.loads((TEMPLATES['electrician']['path'] / 'segment.json').read_text())
+ENGINE = ROOT / 'templates/electrician'  # one visual engine; every segment is a profile under segments/<id>
+TEMPLATES = {
+    'electrician': {'name': 'Eletricista · design base', 'path': ENGINE, 'segment': 'electrician', 'dist': 'dist'},
+    'serralheria': {'name': 'Serralheria · design base', 'path': ENGINE, 'segment': 'serralheria', 'dist': 'dist-serralheria'},
+}
+
+
+def profile(template):
+    """Segment data (segment.json, service catalog) and the prepared build folder of one template."""
+    t = TEMPLATES[template]
+    folder = t['path'] / 'segments' / t['segment']
+    return {
+        'segment': json.loads((folder / 'segment.json').read_text()),
+        'catalog': json.loads((folder / 'service-catalog.json').read_text()),
+        'folder': folder,
+        'dist': t['path'] / t['dist'],
+    }
+
+
+# Electrician aliases kept for callers that predate multi-segment support.
+SERVICE_CATALOG = profile('electrician')['catalog']
+SEGMENT = profile('electrician')['segment']
 DEFAULT_THEME_COLOR = SEGMENT['default_theme_color']
 UF = set('AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split())
 
@@ -60,22 +80,35 @@ def _https(value, key):
 
 
 def fingerprint(template):
+    """Hash of the shared engine plus this segment's own files; other segments' edits do not invalidate it."""
+    t = TEMPLATES[template]
+    root = t['path']
+    others = {name['segment'] for name in TEMPLATES.values()} - {t['segment']}
     digest = hashlib.sha256()
-    for p in sorted(template.rglob('*')):
-        if not p.is_file() or any(x in p.relative_to(template).parts for x in ('node_modules', 'dist', '.vercel')):
+    for p in sorted(root.rglob('*')):
+        parts = p.relative_to(root).parts
+        if not p.is_file() or any(x in ('node_modules', '.vercel') or x == 'dist' or x.startswith('dist-') for x in parts):
             continue
-        digest.update(str(p.relative_to(template)).encode())
+        if (parts[:1] == ('segments',) and parts[1:2] and parts[1] in others) or (parts[:2] == ('public', 'images') and parts[2:3] and parts[2] in others):
+            continue
+        digest.update(str(p.relative_to(root)).encode())
         digest.update(p.read_bytes())
     return digest.hexdigest()
 
 
 def prepare(template='electrician'):
-    source = TEMPLATES[template]['path']
+    t = TEMPLATES[template]
+    source = t['path']
+    dist = source / t['dist']
     if not (source / 'node_modules').exists():
         subprocess.run(['npm', 'ci', '--no-audit', '--no-fund'], cwd=source, check=True)
     subprocess.run(['npm', 'run', 'lint'], cwd=source, check=True)
-    subprocess.run(['npm', 'run', 'build'], cwd=source, check=True)
-    (source / 'dist/.prepared.json').write_text(json.dumps({'fingerprint': fingerprint(source)}))
+    subprocess.run(['npm', 'run', 'build'], cwd=source, check=True, env={**os.environ, 'VITE_SEGMENT': t['segment']})
+    # A site ships only its own segment's photos.
+    for folder in (dist / 'images').glob('*'):
+        if folder.is_dir() and folder.name != t['segment']:
+            shutil.rmtree(folder)
+    (dist / '.prepared.json').write_text(json.dumps({'fingerprint': fingerprint(template)}))
 
 
 def validate(data):
@@ -83,16 +116,18 @@ def validate(data):
         raise ValueError('Business details must be an object')
     template = data.get('template', 'electrician')
     if template not in TEMPLATES:
-        raise ValueError('Choose an available template: electrician')
-    color = data.get('theme_color', DEFAULT_THEME_COLOR)
+        raise ValueError('Choose an available template: ' + ', '.join(TEMPLATES))
+    segment, catalog = profile(template)['segment'], profile(template)['catalog']
+    default_color = segment['default_theme_color']
+    color = data.get('theme_color', default_color)
     if color == '':  # not detected: the segment default applies
-        color = DEFAULT_THEME_COLOR
+        color = default_color
     if not isinstance(color, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', color):
         raise ValueError('Theme color must be a six-digit hex color, e.g. #2563eb')
     # Key absent: the segment's basic services apply. An explicit list (even empty) is honored as given.
-    services = data['enabled_services'] if data.get('enabled_services') is not None else list(SEGMENT['default_services'])
-    if not isinstance(services, list) or any(not isinstance(item, str) or item not in SERVICE_CATALOG for item in services) or len(services) != len(set(services)):
-        raise ValueError('enabled_services must be a list of unique service IDs from service-catalog.json')
+    services = data['enabled_services'] if data.get('enabled_services') is not None else list(segment['default_services'])
+    if not isinstance(services, list) or any(not isinstance(item, str) or item not in catalog for item in services) or len(services) != len(set(services)):
+        raise ValueError('enabled_services must be a list of unique service IDs from the segment service-catalog.json')
     result = {'theme_color': color.lower(), 'enabled_services': services}
     for key in ('name', 'phone', 'email', 'street', 'city', 'zip', 'service_area', 'hours', 'instagram'):
         result[key] = _text(data, key, 180)
@@ -173,8 +208,8 @@ def _mix(rgb, target, amount):
     return [math.floor(c + (t - c) * amount + 0.5) for c, t in zip(rgb, target)]
 
 
-def render_favicon(theme_color):
-    """Same mark as components/Logo.jsx (tile gradient, white house, light bolt), colored like the page theme.
+def render_favicon(theme_color, mark=None):
+    """Same mark as components/Logo.jsx (tile gradient, white outline, light accent; paths from segment.json), colored like the page theme.
     Mirrors deriveTheme() in src/themeMath.js so the favicon, the logo and the theme never disagree."""
     rgb = [int(theme_color[i:i + 2], 16) for i in (1, 3, 5)]
     dark = rgb
@@ -183,37 +218,40 @@ def render_favicon(theme_color):
     light = rgb
     while _luminance(light) < 0.55:
         light = _mix(light, [255, 255, 255], 0.12)
+    mark = mark or SEGMENT['mark']
     hexa = lambda c: '#%02x%02x%02x' % tuple(c)
     return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">'
             f'<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{hexa(rgb)}"/><stop offset="1" stop-color="{hexa(dark)}"/></linearGradient></defs>'
             '<rect width="48" height="48" rx="13" fill="url(#g)"/>'
-            '<path d="M11 23.5 24 12l13 11.5M14 21.5V37h20V21.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
-            f'<path d="M25.6 19.5 20 28.5h5l-1.6 8L30 26.5h-5.2z" fill="{hexa(light)}"/></svg>\n')
+            '<path d="' + mark['outline'] + '" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
+            f'<path d="{mark["accent"]}" fill="{hexa(light)}"/></svg>\n')
 
 
-def render_head(page, business):
+def render_head(page, business, template='electrician'):
     """Static <title>/description/OG per business: link previews (WhatsApp, e-mail) never run JavaScript."""
     city = business.get('city', '')
     suffix = '' if city else '_no_city'
-    values = {'noun': SEGMENT['noun'], 'activity': SEGMENT['activity'], 'city': city, 'name': business['name']}
-    title = SEGMENT['seo_title' + suffix].format(**values)
-    description = SEGMENT['seo_description' + suffix].format(**values)
+    segment = profile(template)['segment']
+    values = {'noun': segment['noun'], 'activity': segment['activity'], 'city': city, 'name': business['name']}
+    title = segment['seo_title' + suffix].format(**values)
+    description = segment['seo_description' + suffix].format(**values)
     esc = lambda value: html.escape(value, quote=True)
     page = re.sub(r'<title>.*?</title>', lambda _: f'<title>{esc(title)}</title>', page, count=1, flags=re.S)
     for pattern, value in ((r'name="description"', description), (r'property="og:title"', title), (r'property="og:description"', description), (r'property="og:site_name"', business['name'])):
         page = re.sub(r'(<meta ' + pattern + r' content=")[^"]*(")', lambda m: m.group(1) + esc(value) + m.group(2), page, count=1)
-    page = re.sub(r'(<meta name="theme-color" content=")[^"]*(")', lambda m: m.group(1) + business.get('theme_color', DEFAULT_THEME_COLOR) + m.group(2), page, count=1)
+    page = re.sub(r'(<meta name="theme-color" content=")[^"]*(")', lambda m: m.group(1) + business.get('theme_color', segment['default_theme_color']) + m.group(2), page, count=1)
     return page.replace('Your Company', esc(business['name']))
 
 
 def create(data, output_root=None):
     started = time.perf_counter()
     template, business = validate(data)
+    prof = profile(template)
     source = TEMPLATES[template]['path']
-    cache = source / 'dist'
+    cache = prof['dist']
     stamp = cache / '.prepared.json'
-    if not stamp.exists() or json.loads(stamp.read_text())['fingerprint'] != fingerprint(source):
-        raise ValueError('Template needs preparation. Run: python3 tools/quick_site.py prepare')
+    if not stamp.exists() or json.loads(stamp.read_text())['fingerprint'] != fingerprint(template):
+        raise ValueError(f'Template needs preparation. Run: python3 tools/quick_site.py prepare --template {template}')
     parent = Path(output_root) if output_root else ROOT / 'runs/quick'
     parent.mkdir(parents=True, exist_ok=True)
     ascii_name = unicodedata.normalize('NFKD', business['name']).encode('ascii', 'ignore').decode().lower()
@@ -226,10 +264,10 @@ def create(data, output_root=None):
         shutil.copytree(cache, site, ignore=shutil.ignore_patterns('.prepared.json'))
         # Data lives in its own JavaScript file. JSON escaping prevents source injection.
         (site / 'business.js').write_text('window.WEBSITE_BUSINESS = ' + json.dumps(business, ensure_ascii=True) + ';\n')
-        (site / 'favicon.svg').write_text(render_favicon(business.get('theme_color', DEFAULT_THEME_COLOR)))
-        (site / 'index.html').write_text(render_head((site / 'index.html').read_text(), business))
+        (site / 'favicon.svg').write_text(render_favicon(business.get('theme_color', prof['segment']['default_theme_color']), prof['segment']['mark']))
+        (site / 'index.html').write_text(render_head((site / 'index.html').read_text(), business, template))
         shutil.copyfile(source / 'vercel.json', site / 'vercel.json')
-        shutil.copyfile(source / 'stock-images.json', staging / 'stock-images.json')
+        shutil.copyfile(prof['folder'] / 'stock-images.json', staging / 'stock-images.json')
         result = {'id': identifier, 'template': template, 'business': business, 'site': str(destination / 'site'), 'seconds': round(time.perf_counter()-started, 3)}
         (staging / 'website.json').write_text(json.dumps(result, indent=2))
         staging.rename(destination)
@@ -248,8 +286,8 @@ def main():
     p = commands.add_parser('create', help='Generate a ready-to-host website')
     p.add_argument('--template', choices=TEMPLATES, default='electrician')
     p.add_argument('--name', required=True)
-    p.add_argument('--theme-color', dest='theme_color', default=DEFAULT_THEME_COLOR, help='Brand color as #RRGGBB (default: segment default; see tools/brand_color.py)')
-    p.add_argument('--enabled-service', dest='enabled_services', action='append', default=None, choices=SERVICE_CATALOG, help='Repeat for each verified service; omit to use the segment basic services')
+    p.add_argument('--theme-color', dest='theme_color', default='', help='Brand color as #RRGGBB (empty: segment default; see tools/brand_color.py)')
+    p.add_argument('--enabled-service', dest='enabled_services', action='append', default=None, help='Service ID from the segment catalog; repeat for each verified service; omit to use the segment basic services')
     p.add_argument('--no-services', dest='no_services', action='store_true', help='Announce no specific services')
     for field in ('phone', 'email', 'street', 'city', 'state', 'zip', 'cnpj', 'hours', 'service_area', 'instagram', 'about', 'whatsapp'):
         p.add_argument('--' + field.replace('_', '-'), dest=field, default='')

@@ -1,6 +1,6 @@
-import catalog from '../service-catalog.json'
+import catalog from '@segment/service-catalog.json'
 import { BUSINESS, asset } from './business.js'
-import SEGMENT from './segments/electrician.js'
+import SEGMENT from '@segment/preset.js'
 
 export { SEGMENT }
 export const SERVICE_CATALOG = catalog
@@ -12,4 +12,4 @@ export const SERVICE_CATALOG = catalog
 const enabled = new Set(BUSINESS.enabled_services)
 export const SERVICES = Object.entries(SEGMENT.services)
   .filter(([id]) => catalog[id] && enabled.has(id))
-  .map(([id, s]) => ({ ...s, id, href: catalog[id], image: asset(s.image) }))
+  .map(([id, s]) => ({ ...s, id, href: catalog[id], image: s.image ? asset(s.image) : '' }))

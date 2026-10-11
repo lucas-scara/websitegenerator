@@ -42,7 +42,7 @@ MVP Brasil em **T0 + 24 horas de janela de execução**: descobrir empresas com 
 - `settings.json`: configuração de operação; **contém identidade e escopo herdados**, substituir antes de rodar.
 - `references/outreach.md`, `references/manual-outreach.md`, `references/coordination.md`, `references/production.md`: regras e comandos que devem permanecer consistentes com este guia.
 - `tools/control.py`: dashboard/SQLite/estados e deduplicação; `tools/quick_site.py`: geração; `tools/site_assets.py`: coleta.
-- `templates/electrician/`: único template atual; após editar, executar preparação/lint/build e validação de páginas.
+- `templates/electrician/`: motor visual único (não renomear). Cada segmento é um perfil em `templates/electrician/segments/<id>/` (`segment.json`, `service-catalog.json`, `preset.js`, `stock-images.json`); segmentos atuais: `electrician` e `serralheria`. Após editar, executar `prepare --template <id>` para cada perfil, lint/build e validação de páginas.
 - `dashboard/`: painel e fila; **enfileirar não inicia trabalhadores**.
 
 ## Definição de pronto e reporte
@@ -58,5 +58,5 @@ Em cada atualização, informar: etapa efetivamente testada, link/evidência qua
 - Chave Firecrawl configurada localmente; a consulta de uso autenticou com 1.036 créditos restantes. Nenhuma empresa foi raspada durante essa checagem.
 - Lucas autorizou remover o projeto fictício de demonstração da Vercel e operar localmente. A prévia local não fornece URL pública para mensagem comercial; resolver a publicação antes de contato real com link.
 - **Template modular (11/10/2026):** Lucas autorizou a evolução modular descrita em `docs/template-modular/`. Primeiro o alicerce brasileiro do template base (WhatsApp, CTAs, formulário, textos, SEO, slugs), depois serralheria e demais perfis, cada etapa em PR próprio.
-- **Slugs em português:** rotas públicas dos templates usam slugs em pt-BR (ex.: `/servicos`, `/reparos-eletricos`). Os IDs internos de `service-catalog.json` permanecem estáveis.
+- **Slugs em português:** rotas públicas dos templates usam slugs em pt-BR (ex.: `/servicos`, `/reparos-eletricos`). Os IDs internos de `segments/<id>/service-catalog.json` permanecem estáveis.
 - **WhatsApp presumido:** o telefone público raspado da empresa pode ser tratado como WhatsApp (≈95% dos casos, segundo Lucas). Os CTAs apontam para `wa.me` com esse número normalizado, salvo quando houver número de WhatsApp específico ou indicação explícita de que o número não usa WhatsApp (`whatsapp: false`).

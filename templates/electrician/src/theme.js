@@ -1,6 +1,6 @@
 // One input color drives the shared palette, including SVGs and animations.
 import { deriveTheme } from './themeMath.js'
-import segment from '../segment.json'
+import segment from '@segment/segment.json'
 
 const supplied = window.WEBSITE_BUSINESS?.theme_color
 const hex = /^#[0-9a-f]{6}$/i.test(supplied || '') ? supplied : segment.default_theme_color

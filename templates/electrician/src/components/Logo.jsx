@@ -1,5 +1,7 @@
-import { SITE } from '../site.js'
-/* New brand lockup: gradient tile with house outline + amber bolt, wordmark beside it. */
+import { SITE, SEGMENT } from '../site.js'
+
+const { outline, accent } = SEGMENT.mark
+/* New brand lockup: gradient tile with the segment mark, wordmark beside it. */
 export function LogoMark({ className = 'h-9 w-9', id = 'lm' }) {
   return (
     <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
@@ -10,8 +12,8 @@ export function LogoMark({ className = 'h-9 w-9', id = 'lm' }) {
         </linearGradient>
       </defs>
       <rect width="48" height="48" rx="13" fill={`url(#${id}-bg)`} />
-      <path d="M11 23.5 24 12l13 11.5M14 21.5V37h20V21.5" fill="none" stroke="white" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M25.6 19.5 20 28.5h5l-1.6 8L30 26.5h-5.2z" fill="rgb(var(--theme-accent))" />
+      <path d={outline} fill="none" stroke="white" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={accent} fill="rgb(var(--theme-accent))" />
     </svg>
   )
 }
@@ -47,13 +49,13 @@ export function HeroMark({ className = '' }) {
         <filter id="hm-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.2" /></filter>
       </defs>
       {/* soft outline */}
-      <path d="M11 23.5 24 12l13 11.5M14 21.5V37h20V21.5" fill="none" stroke="url(#hm-stroke)" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" pathLength="100" className="hm-draw" opacity="0.42" />
+      <path d={outline} fill="none" stroke="url(#hm-stroke)" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" pathLength="100" className="hm-draw" opacity="0.42" />
       {/* travelling current */}
-      <path d="M11 23.5 24 12l13 11.5M14 21.5V37h20V21.5" fill="none" stroke="#FFFFFF" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" pathLength="100" className="hm-flow" opacity="0.9" />
-      <path d="M11 23.5 24 12l13 11.5M14 21.5V37h20V21.5" fill="none" stroke="rgb(var(--theme-primary-light))" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" pathLength="100" className="hm-flow" opacity="0.35" filter="url(#hm-blur)" />
+      <path d={outline} fill="none" stroke="#FFFFFF" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" pathLength="100" className="hm-flow" opacity="0.9" />
+      <path d={outline} fill="none" stroke="rgb(var(--theme-primary-light))" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" pathLength="100" className="hm-flow" opacity="0.35" filter="url(#hm-blur)" />
       {/* bolt */}
       <circle cx="25" cy="29" r="11" fill="url(#hm-glow)" className="hm-pulse" />
-      <path d="M25.6 19.5 20 28.5h5l-1.6 8L30 26.5h-5.2z" fill="rgb(var(--theme-accent))" opacity="0.85" className="hm-pulse" />
+      <path d={accent} fill="rgb(var(--theme-accent))" opacity="0.85" className="hm-pulse" />
     </svg>
   )
 }

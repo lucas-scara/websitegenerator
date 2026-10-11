@@ -29,7 +29,8 @@ def grid():
 @unittest.skipUnless(shutil.which('node'), 'node is required')
 class ThemeContrastTests(unittest.TestCase):
     def test_every_brand_color_yields_legible_pairs(self):
-        colors = list(grid()) + json.loads((TEMPLATE / 'segment.json').read_text())['default_theme_color'].split()
+        defaults = [json.loads(p.read_text())['default_theme_color'] for p in sorted((TEMPLATE / 'segments').glob('*/segment.json'))]
+        colors = list(grid()) + defaults
         script = "import {deriveTheme} from './src/themeMath.js'; console.log(JSON.stringify(JSON.parse(process.argv[1]).map(h=>[h,deriveTheme(h)])))"
         out = subprocess.run(['node', '--input-type=module', '-e', script, json.dumps(colors)], cwd=TEMPLATE, capture_output=True, text=True, check=True).stdout
         for hex_, t in json.loads(out):
