@@ -458,6 +458,88 @@ class ToldosProfileTests(unittest.TestCase):
                     self.assertNotIn(term, block)
 
 
+class DedetizacaoProfileTests(unittest.TestCase):
+    OTHERS = ('electrician', 'serralheria', 'climatizacao', 'chaveiros', 'vidracaria', 'toldos')
+
+    def test_profile_is_valid_and_defaults_are_minimal(self):
+        prof = quick.profile('dedetizacao')
+        self.assertEqual(prof['segment']['id'], 'dedetizacao')
+        self.assertEqual(prof['segment']['default_services'], ['pest-control', 'cockroaches-ants', 'drain-unclogging', 'sewer-unclogging'])
+        self.assertTrue(set(prof['segment']['default_services']) <= set(prof['catalog']))
+        self.assertRegex(prof['segment']['default_theme_color'], r'^#[0-9a-f]{6}$')
+        for path in prof['catalog'].values():
+            self.assertRegex(path, r'^/[a-z0-9-]+$')
+            self.assertNotRegex(path, r'pest|control|cockroach|ants|termite|rodent|drain|sewer|grease|storm|unclog')
+        for other in self.OTHERS:
+            self.assertFalse(set(prof['catalog']) & set(quick.profile(other)['catalog']))
+
+    def test_preset_covers_catalog_without_invented_claims(self):
+        text = (quick.profile('dedetizacao')['folder'] / 'preset.js').read_text()
+        for service_id in quick.profile('dedetizacao')['catalog']:
+            self.assertIn("'%s':" % service_id, text)
+        for term in ('projetos realizados', 'garantia', 'norma', 'anvisa', 'licen', 'certificad', 'R$', 'autorizada', 'emergência', 'emergencia', 'urgên', 'imediat', 'ligar agora', '24h', '24 horas',
+                     'elimina', '100%', 'sem cheiro', 'inodor', 'seguro para', 'não tóxic', 'nao toxic', 'aprovado', 'definitiv', 'sem resíduo', 'ecológic'):
+            with self.subTest(term=term):
+                self.assertNotIn(term, text.lower())
+
+    def test_stock_photos_are_free_and_labelled_illustrative(self):
+        folder = quick.profile('dedetizacao')['folder']
+        for item in json.loads((folder / 'stock-images.json').read_text()):
+            self.assertEqual(item['license'], 'https://unsplash.com/license')
+            self.assertNotIn('plus.unsplash.com', item['image'])
+            self.assertTrue((ENGINE_PUBLIC / item['file']).exists())
+        for alt in re.findall(r"alt: '([^']+)'", (folder / 'preset.js').read_text()):
+            self.assertIn('imagem ilustrativa', alt)
+
+    def test_dedetizacao_site_uses_its_own_build_and_defaults(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(quick.subprocess, 'run', side_effect=AssertionError('Unexpected build')):
+            home = quick.create({'name': 'Pragas Teste', 'phone': '(14) 99712-3456', 'city': 'Bauru', 'state': 'SP', 'template': 'dedetizacao'}, folder)
+            site = Path(home['site'])
+            business = (site / 'business.js').read_text()
+            self.assertIn('#15803d', business)
+            for service_id in quick.profile('dedetizacao')['segment']['default_services']:
+                self.assertIn(service_id, business)
+            for other in ('ev-charging', 'metal-gates', 'split-installation', 'door-opening', 'termites', 'rodents', 'grease-trap', 'storm-drains'):
+                self.assertNotIn(other, business)
+            self.assertNotIn('eletricista', (site / 'index.html').read_text().lower())
+            for other in self.OTHERS:
+                self.assertFalse((site / 'images' / other).exists())
+
+    def test_other_segments_ids_are_rejected_for_dedetizacao(self):
+        for bad in ('ev-charging', 'metal-gates', 'split-installation', 'door-opening', 'gutters'):
+            with self.assertRaisesRegex(ValueError, 'enabled_services'):
+                quick.validate({'name': 'X', 'phone': '123456789', 'template': 'dedetizacao', 'enabled_services': [bad]})
+
+    def test_dedetizacao_build_does_not_ship_other_segments(self):
+        dist = quick.profile('dedetizacao')['dist']
+        text = '\n'.join(p.read_text(errors='ignore') for p in dist.rglob('*') if p.suffix in ('.js', '.html', '.css'))
+        for term in ('Eletricista', 'Quadro de distribuição', 'Portões de ferro', 'Toldos retráteis', *('/images/' + o for o in self.OTHERS)):
+            with self.subTest(term=term):
+                self.assertNotIn(term, text)
+        for other in self.OTHERS:
+            self.assertFalse((dist / 'images' / other).exists())
+
+    def test_other_builds_do_not_ship_dedetizacao(self):
+        for other in self.OTHERS:
+            self.assertFalse((quick.profile(other)['dist'] / 'images' / 'dedetizacao').exists(), other)
+
+    def test_service_groups_stay_independent(self):
+        catalog = quick.profile('dedetizacao')['catalog']
+        text = (quick.profile('dedetizacao')['folder'] / 'preset.js').read_text()
+        groups = {'pests': ('pest-control', 'cockroaches-ants', 'termites', 'rodents'), 'drains': ('drain-unclogging', 'sewer-unclogging', 'grease-trap', 'storm-drains')}
+        self.assertEqual(set(sum(groups.values(), ())), set(catalog))
+        for ids in groups.values():
+            quick.validate({'name': 'X', 'phone': '123456789', 'template': 'dedetizacao', 'enabled_services': list(ids)})
+        forbidden = {'pests': ('entupi', 'esgoto', 'ralo'), 'drains': ('praga', 'inseto', 'barata', 'formiga', 'cupim', 'rato', 'roedor', 'dedetiza')}
+        for group, ids in groups.items():
+            for service_id in ids:
+                block = text.split("'%s': {" % service_id)[1].split('\n    },')[0].lower()
+                block = '\n'.join(l for l in block.split('\n') if not l.strip().startswith(('image:', 'alt:')))  # photo path and alt are not copy
+                for term in forbidden[group]:
+                    with self.subTest(service=service_id, term=term):
+                        self.assertNotIn(term, block)
+
+
 class HeroProofTests(unittest.TestCase):
     def test_payment_is_a_pill_alone_and_joins_the_bar_only_with_another_fact(self):
         src = (Path(__file__).parents[1] / 'templates/electrician/src/pages/HomePage.jsx').read_text()
@@ -470,7 +552,7 @@ class ProcessStackTests(unittest.TestCase):
     ENGINE = Path(__file__).parents[1] / 'templates/electrician'
 
     def test_every_profile_has_three_complete_steps(self):
-        for seg in ('electrician', 'serralheria', 'climatizacao', 'chaveiros', 'vidracaria', 'toldos'):
+        for seg in ('electrician', 'serralheria', 'climatizacao', 'chaveiros', 'vidracaria', 'toldos', 'dedetizacao'):
             text = (quick.profile(seg)['folder'] / 'preset.js').read_text()
             block = text.split('process: [')[1].split('],')[0]
             with self.subTest(segment=seg):

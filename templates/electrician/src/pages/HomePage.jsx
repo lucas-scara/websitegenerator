@@ -42,7 +42,7 @@ function Hero() {
   // Long single words (e.g. "Ar-condicionado") would overflow the hero column at the largest size.
   const heroTitle = SITE.city ? SEGMENT.hero.title : SEGMENT.hero.titleNoCity
   const longest = Math.max(...heroTitle.split(/[\s-]+/).map((w) => w.length))
-  const titleSize = longest >= 12 ? 'text-4xl sm:text-6xl lg:text-7xl' : 'text-5xl sm:text-7xl lg:text-8xl'
+  const titleSize = longest >= 14 ? 'text-4xl sm:text-5xl lg:text-6xl' : longest >= 12 ? 'text-4xl sm:text-6xl lg:text-7xl' : 'text-5xl sm:text-7xl lg:text-8xl'
 
   return (
     <section className="relative min-h-[88svh] lg:min-h-[100dvh] w-full overflow-hidden bg-deep rounded-b-5xl sm:rounded-b-6xl">

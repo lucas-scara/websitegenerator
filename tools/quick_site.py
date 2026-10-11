@@ -24,6 +24,7 @@ TEMPLATES = {
     'chaveiros': {'name': 'Chaveiros · design base', 'path': ENGINE, 'segment': 'chaveiros', 'dist': 'dist-chaveiros'},
     'vidracaria': {'name': 'Vidraçaria · design base', 'path': ENGINE, 'segment': 'vidracaria', 'dist': 'dist-vidracaria'},
     'toldos': {'name': 'Toldos e coberturas · design base', 'path': ENGINE, 'segment': 'toldos', 'dist': 'dist-toldos'},
+    'dedetizacao': {'name': 'Dedetização e desentupimento · design base', 'path': ENGINE, 'segment': 'dedetizacao', 'dist': 'dist-dedetizacao'},
 }
 
 

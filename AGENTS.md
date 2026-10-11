@@ -42,7 +42,7 @@ MVP Brasil em **T0 + 24 horas de janela de execução**: descobrir empresas com 
 - `settings.json`: configuração de operação; **contém identidade e escopo herdados**, substituir antes de rodar.
 - `references/outreach.md`, `references/manual-outreach.md`, `references/coordination.md`, `references/production.md`: regras e comandos que devem permanecer consistentes com este guia.
 - `tools/control.py`: dashboard/SQLite/estados e deduplicação; `tools/quick_site.py`: geração; `tools/site_assets.py`: coleta.
-- `templates/electrician/`: motor visual único (não renomear). Cada segmento é um perfil em `templates/electrician/segments/<id>/` (`segment.json`, `service-catalog.json`, `preset.js`, `stock-images.json`); segmentos atuais: `electrician`, `serralheria`, `climatizacao`, `chaveiros`, `vidracaria` e `toldos`. Após editar, executar `prepare --template <id>` para cada perfil, lint/build e validação de páginas.
+- `templates/electrician/`: motor visual único (não renomear). Cada segmento é um perfil em `templates/electrician/segments/<id>/` (`segment.json`, `service-catalog.json`, `preset.js`, `stock-images.json`); segmentos atuais: `electrician`, `serralheria`, `climatizacao`, `chaveiros`, `vidracaria`, `toldos` e `dedetizacao`. Após editar, executar `prepare --template <id>` para cada perfil, lint/build e validação de páginas.
 - `dashboard/`: painel e fila; **enfileirar não inicia trabalhadores**.
 
 ## Definição de pronto e reporte
