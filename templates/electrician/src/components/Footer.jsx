@@ -1,122 +1,83 @@
-import { asset } from '../business.js'
 import { Link } from 'react-router-dom'
-import { Phone, Mail, MapPin } from 'lucide-react'
-import { SITE, FOOTER_MENU, AREAS, BADGES } from '../site.js'
-import { QuoteBtn } from './Buttons.jsx'
+import { Phone, Mail, MapPin, Clock } from 'lucide-react'
+import { SITE, FOOTER_MENU, AREA, SEGMENT } from '../site.js'
+import { formatPhone, whatsappHref, whatsappMessage } from '../business.js'
+import { ContactBtns } from './Buttons.jsx'
+import { WhatsAppIcon, InstagramIcon } from './Icons.jsx'
 import Reveal from '../lib/Reveal.jsx'
 import Logo from './Logo.jsx'
 
+function instagramHref(value) {
+  if (/^https:\/\/(www\.)?instagram\.com\//.test(value)) return value
+  const handle = value.replace(/^@/, '')
+  return /^[A-Za-z0-9._]{1,30}$/.test(handle) ? `https://instagram.com/${handle}` : ''
+}
+
 export default function Footer() {
+  const insta = SITE.instagram && instagramHref(SITE.instagram)
+  const contacts = [
+    SITE.whatsapp && { Icon: WhatsAppIcon, label: 'WhatsApp', value: formatPhone(SITE.whatsapp), href: whatsappHref(whatsappMessage()), external: true },
+    SITE.phoneHref && { Icon: Phone, label: 'Telefone', value: SITE.phone, href: SITE.phoneHref },
+    SITE.email && { Icon: Mail, label: 'E-mail', value: SITE.email, href: SITE.emailHref },
+    SITE.address && { Icon: MapPin, label: 'Endereço', value: SITE.address },
+    (SITE.serviceArea || !SITE.address) && AREA && { Icon: MapPin, label: 'Atendimento', value: AREA },
+    SITE.hours && { Icon: Clock, label: 'Horário', value: SITE.hours },
+    insta && { Icon: InstagramIcon, label: 'Instagram', value: SITE.instagram.replace(/^https:\/\/(www\.)?instagram\.com\//, '@').replace(/\/$/, ''), href: insta, external: true },
+  ].filter(Boolean)
+
   return (
     <footer className="relative bg-deep text-white rounded-t-6xl mt-8 overflow-hidden">
       <div className="absolute inset-0 grid-bg opacity-15" />
       <div className="absolute -top-32 left-1/2 -translate-x-1/2 h-64 w-[40rem] rounded-full bg-primary/20 blur-3xl" />
 
       <div className="relative px-6 sm:px-10 lg:px-16 pt-20 pb-28 lg:pb-10 max-w-7xl mx-auto">
-        {/* Top tagline + team photo */}
-        <div className="grid lg:grid-cols-12 gap-10 items-end border-b border-white/10 pb-12 mb-12">
-          <Reveal className="lg:col-span-7">
-            <h2 className="font-display font-extrabold text-5xl sm:text-6xl md:text-7xl leading-[0.95] tracking-tight">{"\n              Seu eletricista\n              "}{' '}
-              <span className="font-serif italic font-medium text-primary-light block">{"para sua casa."}</span>
-            </h2>
-            <p className="text-white/55 max-w-md mt-6">{"\n              Serviços elétricos para residências e empresas. Consulte disponibilidade e orçamento.\n            "}</p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <QuoteBtn variant="primary">{"Peça um orçamento"}</QuoteBtn>
-              <a href={SITE.phoneHref} className="lift-on-hover inline-flex items-center gap-2 bg-white/10 border border-white/15 text-white px-6 py-3.5 rounded-full font-semibold">
-                <Phone className="h-4 w-4" /> {SITE.phone}
-              </a>
-            </div>
-          </Reveal>
-          <Reveal delay={150} className="lg:col-span-5">
-            <div className="relative rounded-4xl overflow-hidden border border-white/10 shadow-2xl">
-              <img src={asset("/images/house-dusk.jpg")} alt={"Casa ao anoitecer — imagem ilustrativa"} loading="lazy" className="w-full h-64 sm:h-72 object-cover object-top" />
-              <div className="absolute inset-0 bg-gradient-to-t from-deep/70 to-transparent" />
-              <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-full pl-3 pr-4 py-1.5 text-deep">
-                <span className="relative flex h-2 w-2"><span className="absolute inset-0 rounded-full bg-emerald-500 animate-ping" /><span className="relative h-2 w-2 rounded-full bg-emerald-500" /></span>
-                <span className="font-mono text-[10px] uppercase tracking-widest">{"Para conversar"}</span>
-              </div>
-            </div>
-          </Reveal>
-        </div>
+        <Reveal className="border-b border-white/10 pb-12 mb-12">
+          <h2 className="font-display font-extrabold text-4xl sm:text-6xl leading-[0.98] tracking-tight max-w-3xl">
+            {SEGMENT.noun}{SITE.city ? ` em ${SITE.city}` : ''}
+            <span className="font-serif italic font-medium text-primary-light block">peça seu orçamento.</span>
+          </h2>
+          <ContactBtns className="mt-8" onDark />
+        </Reveal>
 
-        {/* Columns */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-12 gap-10">
-          <div className="col-span-2 lg:col-span-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">{"Dados da empresa"}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10">
+          <div className="lg:col-span-4">
             <div className="mb-5"><Logo tone="light" size="lg" /></div>
-            <p className="text-white/70 text-sm leading-relaxed">
-              <span className="font-semibold text-white">{SITE.name}</span><br />
-              {SITE.address}
-            </p>
-            <p className="text-white/50 text-sm leading-relaxed mt-4 max-w-xs">{SITE.certLine}</p>
-            <div className="mt-5 flex flex-wrap items-center gap-2">
-              {BADGES.map((b) => (
-                <span key={b.src} className="bg-white rounded-xl px-3 py-2 flex items-center">
-                  <img src={b.src} alt={b.alt} loading="lazy" className="h-6 w-auto object-contain" />
-                </span>
-              ))}
-            </div>
+            {SITE.cnpj && <p className="text-white/70 text-sm">CNPJ {SITE.cnpj}</p>}
+            {SITE.paymentMethods.length > 0 && (
+              <p className="text-white/55 text-sm mt-4">Pagamento: {SITE.paymentMethods.join(', ')}</p>
+            )}
           </div>
 
-          <div className="lg:col-span-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">{"Contato"}</p>
+          <div className="lg:col-span-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">Contato</p>
             <ul className="space-y-3 text-sm">
-              <li>
-                <span className="block text-white/40 text-xs">{"Telefone:"}</span>
-                <a href={SITE.phoneHref} className="text-white/85 hover:text-primary-light transition inline-flex items-center gap-2"><Phone className="h-3.5 w-3.5" /> {SITE.phone}</a>
-              </li>
-              <li>
-                <span className="block text-white/40 text-xs">E-mail:</span>
-                <a href={SITE.emailHref} className="text-white/85 hover:text-primary-light transition inline-flex items-center gap-2 break-all"><Mail className="h-3.5 w-3.5 shrink-0" /> {SITE.email}</a>
-              </li>
-              <li>
-                <span className="block text-white/40 text-xs">{"Endereço:"}</span>
-                <span className="text-white/85 inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5" /> {SITE.address}</span>
-              </li>
-            </ul>
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-3 mt-8">{"Horários"}</p>
-            <ul className="space-y-1.5 text-sm text-white/75">
-              {SITE.hours.map(([d, h]) => <li key={d}>{d}: {h}</li>)}
-            </ul>
-            <p className="text-white/40 text-xs italic mt-2">{SITE.hoursNote}</p>
-          </div>
-
-          <div className="lg:col-span-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">Menu</p>
-            <ol className="space-y-2">
-              {FOOTER_MENU.map((m, i) => (
-                <li key={m.label} className="flex gap-2 text-sm">
-                  <span className="font-mono text-[10px] text-white/30 pt-1">{String(i + 1).padStart(2, '0')}</span>
-                  <Link to={m.href} className="text-white/75 hover:text-primary-light transition">{m.label}</Link>
+              {contacts.map(({ Icon, label, value, href, external }) => (
+                <li key={label} className="flex items-start gap-3">
+                  <Icon className="h-4 w-4 mt-0.5 shrink-0 text-primary-light" />
+                  <span className="min-w-0">
+                    <span className="block text-white/40 text-xs">{label}</span>
+                    {href
+                      ? <a href={href} {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})} className="text-white/85 hover:text-primary-light transition break-words">{value}</a>
+                      : <span className="text-white/85 break-words">{value}</span>}
+                  </span>
                 </li>
               ))}
-            </ol>
+            </ul>
           </div>
 
-          <div className="col-span-2 md:col-span-4 lg:col-span-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">{"Área atendida"}</p>
-            <ul className="grid grid-cols-2 gap-x-6 gap-y-2">
-              {AREAS.elektriker.map((a) => (
-                <li key={a.href}><Link to={a.href} className="text-sm text-white/75 hover:text-primary-light transition">{a.label.replace(/^Elektriker i /, '')}</Link></li>
+          <div className="lg:col-span-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary-light mb-4">Navegação</p>
+            <ul className="space-y-2">
+              {FOOTER_MENU.map((m) => (
+                <li key={m.href}><Link to={m.href} className="text-sm text-white/75 hover:text-primary-light transition">{m.label}</Link></li>
               ))}
             </ul>
           </div>
         </div>
 
-        {/* Bottom */}
-        <div className="mt-14 pt-8 border-t border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <a href={SITE.phoneHref} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm hover:bg-white/15 transition"><Phone className="h-3.5 w-3.5" /> {SITE.phone}</a>
-            <a href={SITE.emailHref} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm hover:bg-white/15 transition"><Mail className="h-3.5 w-3.5" /> Enviar e-mail</a>
-            <span className="text-white/50 text-sm">Prévia ilustrativa de site</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-white/50 text-xs font-mono">
-            <span>Copyright © {new Date().getFullYear()} - {SITE.name}</span>
-            <span className="hidden sm:inline">|</span>
-            <span>Prévia demonstrativa · sem coleta de mensagens</span>
-            <span className="hidden sm:inline">|</span>
-            <span>Imagens meramente ilustrativas</span>
-          </div>
+        <div className="mt-14 pt-8 border-t border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3 text-white/50 text-xs">
+          <span>© {new Date().getFullYear()} {SITE.name}</span>
+          {SITE.preview && <span>Prévia demonstrativa · imagens meramente ilustrativas</span>}
         </div>
       </div>
     </footer>

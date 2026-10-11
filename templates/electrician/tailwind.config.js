@@ -15,12 +15,15 @@ export default {
         muted: '#5B6577',
         divider: '#E3E8EF',
         deep: '#0B1220',
+        'on-primary': 'var(--theme-on-primary)',
+        whatsapp: '#25D366',
+        'whatsapp-dark': '#1EBE5A',
       },
       fontFamily: {
         display: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
         serif: ['"Cormorant Garamond"', 'Georgia', 'serif'],
         body: ['"Inter"', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       borderRadius: {
         '2.5xl': '1.25rem',

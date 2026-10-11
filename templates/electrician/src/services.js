@@ -1,16 +1,15 @@
 import catalog from '../service-catalog.json'
-import { BUSINESS } from './business.js'
+import { BUSINESS, asset } from './business.js'
+import SEGMENT from './segments/electrician.js'
 
+export { SEGMENT }
 export const SERVICE_CATALOG = catalog
-const enabled = new Set(Array.isArray(BUSINESS.enabled_services) ? BUSINESS.enabled_services : [])
-export const enabledServiceIds = Object.keys(catalog).filter((id) => enabled.has(id))
-const serviceByPath = Object.fromEntries(Object.entries(catalog).map(([id, path]) => [path, id]))
 
-export function isServiceEnabled(path) {
-  const id = serviceByPath[path]
-  return !id || enabled.has(id)
-}
-
-export function enabledItems(items) {
-  return items.filter((item) => isServiceEnabled(item.href))
-}
+/*
+ * Single source for every service mention (menu, cards, routes, form, FAQ, footer, SEO).
+ * Deny by default: an ID must exist in the catalog, in the preset and in enabled_services.
+ */
+const enabled = new Set(BUSINESS.enabled_services)
+export const SERVICES = Object.entries(SEGMENT.services)
+  .filter(([id]) => catalog[id] && enabled.has(id))
+  .map(([id, s]) => ({ ...s, id, href: catalog[id], image: asset(s.image) }))

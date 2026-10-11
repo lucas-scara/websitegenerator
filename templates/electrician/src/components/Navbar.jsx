@@ -1,9 +1,9 @@
-import { copy } from '../business.js'
+import { channels } from '../business.js'
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Menu, X, Phone, ArrowUpRight, ChevronDown, Zap } from 'lucide-react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
+import { Menu, X, ChevronDown } from 'lucide-react'
 import { NAV, SITE } from '../site.js'
-import { scrollToForm } from '../lib/scrollToForm.js'
+import { ContactBtns } from './Buttons.jsx'
 import Logo from './Logo.jsx'
 
 export default function Navbar() {
@@ -14,7 +14,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const lastY = useRef(0)
   const { pathname } = useLocation()
-  const navigate = useNavigate()
+  const primary = channels()[0]
 
   useEffect(() => {
     const onScroll = () => {
@@ -52,7 +52,7 @@ export default function Navbar() {
           className={`pointer-events-none absolute inset-0 -z-10 rounded-full bg-white/90 backdrop-blur-xl shadow-xl shadow-deep/10 transition-opacity duration-300 ${scrolled || menuOpen ? 'opacity-100' : 'opacity-0'}`}
         />
         <div className="flex items-center justify-between gap-4">
-          <Link to="/" className="flex items-center shrink-0 pl-1 group" aria-label={copy("Your Company — início")}>
+          <Link to="/" className="flex items-center shrink-0 pl-1 group" aria-label={`${SITE.name} — início`}>
             <Logo tone={onDark ? 'light' : 'dark'} className="transition-transform duration-500 group-hover:scale-[1.02]" />
           </Link>
 
@@ -87,16 +87,6 @@ export default function Navbar() {
                           )}
                         </div>
                       ))}
-                      <div className="col-span-3 mt-1 rounded-3xl bg-deep text-white p-4 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          <span className="h-9 w-9 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center"><Zap className="h-4 w-4 text-accent" strokeWidth={2.4} /></span>
-                          <div>
-                            <p className="font-display font-semibold text-sm">{"Precisa de ajuda?"}</p>
-                            <p className="text-white/60 text-xs">{"Entre em contato para conversar sobre suas necessidades."}</p>
-                          </div>
-                        </div>
-                        <a href={SITE.phoneHref} className="magnetic-btn inline-flex items-center gap-2 bg-white text-deep px-4 py-2 rounded-full text-sm font-semibold"><Phone className="h-4 w-4" /> {SITE.phone}</a>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -109,22 +99,16 @@ export default function Navbar() {
           </div>
 
           <div className="hidden lg:flex items-center gap-2">
-            <a href={SITE.phoneHref} className={`lift-on-hover inline-flex items-center gap-2 text-sm font-semibold px-3 py-2 transition-colors ${onDark ? 'text-white' : 'text-ink'}`}>
-              <Phone className={`h-4 w-4 ${onDark ? 'text-accent' : 'text-primary'}`} strokeWidth={2.4} /> {SITE.phone}
-            </a>
-            <button
-              type="button"
-              onClick={() => scrollToForm(navigate)}
-              className={`magnetic-btn inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-colors ${onDark ? 'bg-white text-deep shadow-deep/20' : 'bg-primary text-deep shadow-primary/30'}`}
-            >{"\n              Peça um orçamento "}<ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
-            </button>
+            {primary && (
+              <a href={primary.href} {...(primary.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                className={`magnetic-btn inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-colors ${onDark ? 'bg-white text-deep shadow-deep/20' : 'bg-primary text-on-primary shadow-primary/30'}`}>
+                {primary.kind === 'whatsapp' ? 'Pedir orçamento' : primary.short}
+              </a>
+            )}
           </div>
 
           {/* Mobile controls */}
           <div className="flex lg:hidden items-center gap-1">
-            <a href={SITE.phoneHref} aria-label={"Ligue para nós"} className={`h-10 w-10 rounded-full flex items-center justify-center transition-colors ${onDark ? 'bg-white text-deep' : 'bg-primary text-deep'}`}>
-              <Phone className="h-4 w-4" strokeWidth={2.4} />
-            </a>
             <button type="button" onClick={() => setOpen(true)} className={`h-10 w-10 rounded-full flex items-center justify-center ${onDark ? 'text-white' : 'text-ink'}`} aria-label={"Abrir menu"}>
               <Menu className="h-5 w-5" />
             </button>
@@ -172,14 +156,7 @@ export default function Navbar() {
               )
             )}
           </div>
-          <div className="mt-8 grid gap-3">
-            <button type="button" onClick={() => { setOpen(false); setTimeout(() => scrollToForm(navigate), 350) }} className="magnetic-btn flex items-center justify-center gap-2 bg-primary text-deep px-6 py-4 rounded-full font-semibold w-full">{"\n              Peça um orçamento "}<ArrowUpRight className="h-4 w-4" />
-            </button>
-            <a href={SITE.phoneHref} className="flex items-center justify-center gap-2 bg-deep text-white px-6 py-4 rounded-full font-semibold w-full">
-              <Phone className="h-4 w-4" />{" Ligar "}{SITE.phone}
-            </a>
-          </div>
-          <p className="mt-6 text-center text-xs text-muted">{SITE.hoursNote}</p>
+          <ContactBtns className="mt-8 [&>*]:w-full" size="lg" />
         </div>
       </div>
     </>
