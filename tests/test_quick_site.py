@@ -458,4 +458,31 @@ class ToldosProfileTests(unittest.TestCase):
                     self.assertNotIn(term, block)
 
 
+class ProcessStackTests(unittest.TestCase):
+    ENGINE = Path(__file__).parents[1] / 'templates/electrician'
+
+    def test_every_profile_has_three_complete_steps(self):
+        for seg in ('electrician', 'serralheria', 'climatizacao', 'chaveiros', 'vidracaria', 'toldos'):
+            text = (quick.profile(seg)['folder'] / 'preset.js').read_text()
+            block = text.split('process: [')[1].split('],')[0]
+            with self.subTest(segment=seg):
+                self.assertEqual(len(re.findall(r"title: '", block)), 3)
+                self.assertEqual(len(re.findall(r"text: '", block)), 3)
+
+    def test_gsap_is_loaded_on_demand_only(self):
+        src = self.ENGINE / 'src'
+        stack = (src / 'components/ProcessStack.jsx').read_text()
+        self.assertIn("import('gsap')", stack)
+        self.assertIn("import('gsap/ScrollTrigger')", stack)
+        self.assertIn('prefers-reduced-motion', stack)
+        for path in src.rglob('*.js*'):
+            self.assertNotRegex(path.read_text(), r"^import .* from 'gsap", msg=str(path))  # never a static import
+        self.assertIn('ProcessStack', (src / 'pages/HomePage.jsx').read_text())
+
+    def test_step_photos_come_from_enabled_services_only(self):
+        stack = (self.ENGINE / 'src/components/ProcessStack.jsx').read_text()
+        self.assertIn('SERVICES.filter', stack)
+        self.assertIn('imagem ilustrativa', stack)
+
+
 if __name__=='__main__':unittest.main()

@@ -21,7 +21,7 @@ python3 tools/quick_site.py prepare --template electrician
 python3 tools/quick_site.py prepare --template serralheria   # (idem climatizacao, chaveiros, vidracaria e toldos) um build preparado por segmento
 ```
 
-O comando instala dependências se necessário, roda lint e `vite build`, depois grava a impressão digital do template. Faça QA desktop/mobile e das rotas após editar o modelo. O prerender legado `templates/electrician/scripts/prerender.mjs` é inseguro e **não deve ser executado**. Não use `build:static` nem prepare cópia por empresa.
+O comando instala dependências se necessário, roda lint e `vite build`, depois grava a impressão digital do template. Faça QA desktop/mobile e das rotas após editar o modelo. O prerender legado `templates/electrician/scripts/prerender.mjs` é inseguro e **não deve ser executado**. Não use `build:static` nem prepare cópia por empresa. A seção “Como pedir” da home usa cartões empilhados (`ProcessStack.jsx`); o GSAP é carregado sob demanda (import dinâmico perto da seção, ignorado com `prefers-reduced-motion`) e, se falhar, os cartões continuam empilhando por CSS `sticky`. Não importe o GSAP de forma estática.
 
 ## Vercel
 

@@ -10,6 +10,7 @@ import ServicesGrid from '../components/ServicesGrid.jsx'
 import FAQ from '../components/FAQ.jsx'
 import Reviews from '../components/Reviews.jsx'
 import { Btn, ContactBtns } from '../components/Buttons.jsx'
+import ProcessStack from '../components/ProcessStack.jsx'
 import ContactSection from '../components/ContactSection.jsx'
 import { HeroMark } from '../components/Logo.jsx'
 
@@ -119,28 +120,6 @@ function Facts() {
   )
 }
 
-function Process() {
-  return (
-    <section className="relative py-24 sm:py-32 px-6 sm:px-10 lg:px-16 bg-deep text-white overflow-hidden rounded-6xl mx-2 sm:mx-4">
-      <div className="absolute inset-0 grid-bg opacity-20" />
-      <div className="absolute -top-20 -right-20 h-96 w-96 rounded-full bg-primary/20 blur-3xl" />
-      <div className="relative max-w-7xl mx-auto">
-        <SectionHeading eyebrow="Como pedir" title="Seu orçamento" flourish="em três passos." dark />
-        <ol className="mt-14 grid md:grid-cols-3 gap-5">
-          {SEGMENT.process.map((step, i) => (
-            <Reveal key={step.title} as="li" delay={i * 100} className="rounded-4xl bg-white/[0.05] border border-white/10 p-7">
-              <span className="font-display font-extrabold text-5xl text-primary-light/40">{String(i + 1).padStart(2, '0')}</span>
-              <h3 className="font-display font-bold text-2xl mt-4">{step.title}</h3>
-              <p className="text-white/70 mt-3 leading-relaxed">{step.text}</p>
-            </Reveal>
-          ))}
-        </ol>
-        <ContactBtns className="mt-12" onDark />
-      </div>
-    </section>
-  )
-}
-
 /* FAQ answered strictly from business data; questions without data are left out. */
 function homeFaq() {
   const how = SITE.whatsapp
@@ -186,7 +165,7 @@ export default function HomePage() {
           </div>
         </section>
       )}
-      <Process />
+      <ProcessStack />
       <Reviews />
       {SITE.about && (
         <section className="py-24 sm:py-32 px-6 sm:px-10 lg:px-16">
