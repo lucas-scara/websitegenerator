@@ -4,8 +4,7 @@ import meta from './segment.json'
  * Segment preset: what a serralheria (metalwork shop) *may* offer. Only services listed in the
  * business `enabled_services` are rendered. Copy describes the service in general terms and never
  * states facts about a specific company (prices, deadlines, guarantees, certifications, portfolio).
- * No stock photographs are bundled yet: pages fall back to the themed design until illustrative
- * images are added under public/images/serralheria and listed in stock-images.json.
+ * Illustrative stock photographs (see stock-images.json) are bundled; services without a photo fall back to the themed design.
  */
 export default {
   ...meta,
@@ -13,6 +12,8 @@ export default {
     title: 'Serralheria',
     titleNoCity: 'Serralheria',
     flourishNoCity: 'para o seu imóvel',
+    image: meta.hero_image,
+    alt: 'Serralheiro cortando metal com esmerilhadeira (imagem ilustrativa)',
   },
   servicesHeading: { title: 'Serviços de serralheria', flourish: 'para o seu imóvel.' },
   process: [
@@ -22,6 +23,8 @@ export default {
   ],
   services: {
     'metal-gates': {
+      image: '/images/serralheria/portao.jpg',
+      alt: 'Cerca de ferro com ponteiras — imagem ilustrativa',
       label: "Portões de ferro", icon: 'DoorClosed',
       short: "Portões de correr, basculantes e de abrir, feitos sob medida para o seu imóvel.",
       intro: "Fabricação e instalação de portões de ferro ou aço para residências, comércios e galpões, nos modelos de correr, basculante ou de abrir.",
@@ -36,6 +39,8 @@ export default {
       faq: [{ q: "Meu portão atual pode ser automatizado?", a: "Depende do tipo, do peso e do estado do portão. Envie fotos e medidas para uma avaliação." }],
     },
     'gate-maintenance': {
+      image: '/images/serralheria/manutencao.jpg',
+      alt: 'Soldagem em peça metálica — imagem ilustrativa',
       label: "Manutenção de portões", icon: 'Wrench',
       short: "Ajuste, lubrificação e reparo de portões manuais e automáticos.",
       intro: "Manutenção de portões que travam, arrastam, fazem barulho ou saíram do prumo, incluindo roldanas, trilhos, dobradiças e motores.",
@@ -43,6 +48,8 @@ export default {
       faq: [{ q: "Portão automático parou de funcionar: o que informar?", a: "Descreva o sintoma (não abre, não fecha, faz barulho) e envie a marca do motor, se souber. Isso ajuda a preparar a visita." }],
     },
     'grilles': {
+      image: '/images/serralheria/grade.jpg',
+      alt: 'Grade de ferro ornamental em janela — imagem ilustrativa',
       label: "Grades de proteção", icon: 'Grid3x3',
       short: "Grades para janelas, portas, varandas e áreas externas.",
       intro: "Fabricação e instalação de grades de ferro ou aço para janelas, portas, varandas e outras aberturas, com desenho de acordo com o imóvel.",
@@ -50,6 +57,8 @@ export default {
       faq: [{ q: "Dá para escolher o desenho da grade?", a: "O desenho costuma ser combinado conforme o imóvel e o gosto de quem contrata. Envie fotos ou referências ao pedir o orçamento." }],
     },
     'railings': {
+      image: '/images/serralheria/guarda-corpo.jpg',
+      alt: 'Escada com guarda-corpo metálico — imagem ilustrativa',
       label: "Guarda-corpos", icon: 'Fence',
       short: "Guarda-corpos em metal para escadas, sacadas, varandas e mezaninos.",
       intro: "Fabricação e instalação de guarda-corpos metálicos para escadas, sacadas, varandas e mezaninos, seguindo as exigências de segurança do local.",
@@ -57,6 +66,8 @@ export default {
       faq: [{ q: "Existe uma altura mínima para guarda-corpo?", a: "Existem normas técnicas e exigências locais que variam conforme o tipo de edificação. Informe o local para receber orientação." }],
     },
     'handrails': {
+      image: '/images/serralheria/corrimao.jpg',
+      alt: 'Corrimão metálico em escada — imagem ilustrativa',
       label: "Corrimãos", icon: 'Hand',
       short: "Corrimãos em metal para escadas e rampas, internos ou externos.",
       intro: "Fabricação e instalação de corrimãos metálicos para escadas e rampas, em residências, comércios e áreas comuns.",
@@ -64,6 +75,8 @@ export default {
       faq: [{ q: "O corrimão pode ser instalado em escada já pronta?", a: "Em geral sim, desde que haja onde fixar com segurança. Fotos da escada ajudam a avaliar." }],
     },
     'metal-stairs': {
+      image: '/images/serralheria/escada.jpg',
+      alt: 'Corrimão metálico em escada de concreto — imagem ilustrativa',
       label: "Escadas metálicas", icon: 'Footprints',
       short: "Escadas retas, caracol e de acesso a mezaninos ou áreas técnicas.",
       intro: "Fabricação e instalação de escadas metálicas em modelos retos, em L ou caracol, para uso residencial, comercial ou de acesso.",
@@ -71,6 +84,8 @@ export default {
       faq: [{ q: "Preciso informar o desnível exato?", a: "A altura entre os pisos define o número de degraus. Uma medida aproximada ajuda no orçamento, e a medida final é conferida no local." }],
     },
     'metal-doors-windows': {
+      image: '/images/serralheria/janela.jpg',
+      alt: 'Janela com grade de ferro — imagem ilustrativa',
       label: "Portas e janelas de metal", icon: 'DoorOpen',
       short: "Portas e janelas em ferro ou aço, com ou sem vidro.",
       intro: "Fabricação e instalação de portas e janelas de metal, para acesso, divisórias e aberturas que pedem mais resistência.",
@@ -78,6 +93,8 @@ export default {
       faq: [{ q: "Dá para fazer sob medida em vão fora do padrão?", a: "Esse tipo de serviço costuma ser feito sob medida. Envie as medidas e fotos do vão." }],
     },
     'metal-structures': {
+      image: '/images/serralheria/estrutura.jpg',
+      alt: 'Soldagem de estrutura metálica — imagem ilustrativa',
       label: "Estruturas metálicas", icon: 'Construction',
       short: "Estruturas simples em aço para coberturas, mezaninos e apoios.",
       intro: "Fabricação e montagem de estruturas metálicas de pequeno porte, como suportes, coberturas e mezaninos, conforme a necessidade do imóvel.",
@@ -85,6 +102,8 @@ export default {
       faq: [{ q: "Estruturas maiores precisam de projeto?", a: "Estruturas que sustentam carga costumam exigir cálculo e projeto técnico. Descreva o caso para receber orientação." }],
     },
     'fences': {
+      image: '/images/serralheria/portao.jpg',
+      alt: 'Cerca de ferro com ponteiras — imagem ilustrativa',
       label: "Cercas metálicas", icon: 'LayoutGrid',
       short: "Cercas e fechamentos em metal para terrenos, quintais e áreas comerciais.",
       intro: "Fabricação e instalação de cercas e fechamentos metálicos para terrenos, quintais, áreas comerciais e divisas.",
@@ -92,6 +111,8 @@ export default {
       faq: [{ q: "A cerca pode seguir o desnível do terreno?", a: "Em geral é possível adaptar o fechamento ao terreno. Fotos e medidas ajudam a avaliar." }],
     },
     'welding-repairs': {
+      image: '/images/serralheria/solda.jpg',
+      alt: 'Soldador em trabalho — imagem ilustrativa',
       label: "Soldas e reparos", icon: 'Flame',
       short: "Reparo, reforço e soldagem em peças e estruturas de metal.",
       intro: "Soldagem, reforço e conserto de portões, grades, estruturas e outras peças metálicas danificadas ou desgastadas.",
@@ -99,6 +120,8 @@ export default {
       faq: [{ q: "O reparo pode ser feito no local?", a: "Depende do tamanho e da posição da peça. Informe o caso para saber se é preciso levar a peça à oficina." }],
     },
     'custom-metalwork': {
+      image: '/images/serralheria/sob-medida.jpg',
+      alt: 'Detalhe de grade de ferro trabalhada — imagem ilustrativa',
       label: "Serralheria sob medida", icon: 'Ruler',
       short: "Peças e acabamentos em metal feitos conforme a sua necessidade.",
       intro: "Projetos de serralheria personalizados, como suportes, mesas, prateleiras, estruturas decorativas e outras peças em metal.",
