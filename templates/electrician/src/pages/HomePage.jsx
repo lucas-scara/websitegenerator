@@ -19,11 +19,24 @@ const listLabels = (items) => {
   return names.length > 1 ? names.slice(0, -1).join(', ') + ' e ' + names.at(-1) : names[0] || ''
 }
 
+/* Verified proof points. Payment joins the proof bar only when there is another fact beside it;
+   alone it becomes a hero pill, so the bar never shows a single sparse item on desktop. */
+function proofFacts() {
+  const base = [
+    SITE.google && { Icon: Star, value: SITE.google.rating.toFixed(1).replace('.', ','), label: SITE.google.count ? `${SITE.google.count} avaliações no Google` : 'nota no Google', href: SITE.google.url },
+    SITE.foundedYear && { Icon: CalendarCheck, value: `Desde ${SITE.foundedYear}`, label: 'em atividade' },
+  ].filter(Boolean)
+  const pay = SITE.paymentMethods.length > 0
+  if (base.length && pay) return { facts: [...base, { Icon: CreditCard, value: 'Pagamento', label: SITE.paymentMethods.join(', ') }], payPill: false }
+  return { facts: base, payPill: pay }
+}
+
 function Hero() {
   const featured = SERVICES.slice(0, 3)
   const chips = [
     AREA && { Icon: MapPin, text: `Atende ${AREA}` },
     SITE.hours && { Icon: Clock, text: SITE.hours },
+    proofFacts().payPill && { Icon: CreditCard, text: `Pagamento: ${SITE.paymentMethods.join(', ')}` },
   ].filter(Boolean)
 
   // Long single words (e.g. "Ar-condicionado") would overflow the hero column at the largest size.
@@ -92,11 +105,7 @@ function Hero() {
 
 /* Short proof strip — only facts supplied with the business data. */
 function Facts() {
-  const facts = [
-    SITE.google && { Icon: Star, value: SITE.google.rating.toFixed(1).replace('.', ','), label: SITE.google.count ? `${SITE.google.count} avaliações no Google` : 'nota no Google', href: SITE.google.url },
-    SITE.foundedYear && { Icon: CalendarCheck, value: `Desde ${SITE.foundedYear}`, label: 'em atividade' },
-    SITE.paymentMethods.length > 0 && { Icon: CreditCard, value: 'Pagamento', label: SITE.paymentMethods.join(', ') },
-  ].filter(Boolean)
+  const { facts } = proofFacts()
   if (!facts.length) return null
   return (
     <section className="relative z-20 -mt-10 sm:-mt-12 mb-10 sm:mb-14 px-4 sm:px-10 lg:px-16">

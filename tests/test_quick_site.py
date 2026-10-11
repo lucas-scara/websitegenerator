@@ -458,6 +458,14 @@ class ToldosProfileTests(unittest.TestCase):
                     self.assertNotIn(term, block)
 
 
+class HeroProofTests(unittest.TestCase):
+    def test_payment_is_a_pill_alone_and_joins_the_bar_only_with_another_fact(self):
+        src = (Path(__file__).parents[1] / 'templates/electrician/src/pages/HomePage.jsx').read_text()
+        self.assertIn('function proofFacts()', src)
+        self.assertIn('payPill', src)
+        self.assertIn('base.length && pay', src)
+
+
 class ProcessStackTests(unittest.TestCase):
     ENGINE = Path(__file__).parents[1] / 'templates/electrician'
 
