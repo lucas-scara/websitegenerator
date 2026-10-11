@@ -132,7 +132,7 @@ function Facts() {
 /* FAQ answered strictly from business data; questions without data are left out. */
 function homeFaq() {
   const how = SITE.whatsapp
-    ? 'Clique em “Pedir orçamento no WhatsApp” ou preencha o formulário: a conversa abre com sua mensagem pronta. Se puder, envie fotos do local.'
+    ? SITE.preview ? 'Clique em “Pedir orçamento no WhatsApp” para iniciar uma conversa. O formulário desta prévia é apenas demonstrativo.' : 'Clique em “Pedir orçamento no WhatsApp” ou preencha o formulário: a conversa abre com sua mensagem pronta. Se puder, envie fotos do local.'
     : SITE.phoneHref ? `Ligue para ${SITE.phone} e descreva o serviço.` : `Envie um e-mail para ${SITE.email} descrevendo o serviço.`
   return [
     { q: 'Como peço um orçamento?', a: how },

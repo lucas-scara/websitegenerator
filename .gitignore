@@ -19,3 +19,5 @@ runs/*
 data/*
 !data/.gitkeep
 diagnostics/
+.vercel
+.env*

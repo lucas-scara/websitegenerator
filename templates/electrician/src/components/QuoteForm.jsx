@@ -36,6 +36,7 @@ export default function QuoteForm({ id, service, title = 'Peça seu orçamento',
 
   const submit = (e) => {
     e.preventDefault()
+    if (SITE.preview) return
     const text = compose()
     const href = channel === 'whatsapp'
       ? whatsappHref(text)
@@ -47,7 +48,7 @@ export default function QuoteForm({ id, service, title = 'Peça seu orçamento',
     <form id={id} onSubmit={submit} className={`bg-surface border border-divider rounded-4xl p-6 sm:p-8 shadow-xl shadow-primary/5 text-ink ${className}`}>
       <h3 className="font-display font-bold text-xl sm:text-2xl leading-tight">{title}</h3>
       <p className="text-muted text-sm mt-1.5">
-        {channel === 'whatsapp' ? 'Preencha e sua mensagem abre pronta no WhatsApp.' : 'Preencha e sua mensagem abre pronta no seu e-mail.'}
+        {SITE.preview ? 'Formulário demonstrativo: nenhum dado será enviado.' : channel === 'whatsapp' ? 'Preencha e sua mensagem abre pronta no WhatsApp.' : 'Preencha e sua mensagem abre pronta no seu e-mail.'}
       </p>
       <div className="grid gap-4 mt-6">
         <Field label="Seu nome">
@@ -69,9 +70,9 @@ export default function QuoteForm({ id, service, title = 'Peça seu orçamento',
           <textarea className={`${input} min-h-[96px] resize-y`} name="message" value={form.message} onChange={set('message')} placeholder="Conte rapidamente o que precisa" />
         </Field>
       </div>
-      <button type="submit" className={`magnetic-btn mt-6 w-full inline-flex items-center justify-center gap-2 rounded-full font-semibold px-6 py-4 ${channel === 'whatsapp' ? 'bg-whatsapp text-deep hover:bg-whatsapp-dark' : 'bg-primary text-on-primary hover:bg-primary-dark hover:text-white'}`}>
+      <button type="submit" disabled={SITE.preview} className={`magnetic-btn mt-6 w-full inline-flex items-center justify-center gap-2 rounded-full font-semibold px-6 py-4 disabled:opacity-60 disabled:cursor-not-allowed ${channel === 'whatsapp' ? 'bg-whatsapp text-deep hover:bg-whatsapp-dark' : 'bg-primary text-on-primary hover:bg-primary-dark hover:text-white'}`}>
         {channel === 'whatsapp' ? <WhatsAppIcon className="h-5 w-5" /> : <Mail className="h-5 w-5" />}
-        {channel === 'whatsapp' ? 'Continuar no WhatsApp' : 'Continuar no e-mail'}
+        {SITE.preview ? 'Envio desativado na prévia' : channel === 'whatsapp' ? 'Continuar no WhatsApp' : 'Continuar no e-mail'}
       </button>
       <p className="text-xs text-muted mt-3 text-center">Este site não envia nem armazena seus dados.</p>
     </form>
