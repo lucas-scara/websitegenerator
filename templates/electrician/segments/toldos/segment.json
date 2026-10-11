@@ -1,0 +1,28 @@
+{
+  "id": "toldos",
+  "default_theme_color": "#c2410c",
+  "schema_type": "LocalBusiness",
+  "mark": {
+    "outline": "M8 20h32l-3-9H11zM8 20c0 3 3 3 4 0 1 3 4 3 4 0 1 3 4 3 4 0 1 3 4 3 4 0 1 3 4 3 4 0M10 20v18M38 20v18",
+    "accent": "M24 28c2 3 3 5 3 6.5a3 3 0 0 1-6 0c0-1.5 1-3.5 3-6.5z"
+  },
+  "noun": "Proteção contra sol e chuva",
+  "activity": "serviços de proteção contra sol e chuva",
+  "seo_title": "{noun} em {city} | {name}",
+  "seo_title_no_city": "{noun} | {name}",
+  "seo_description": "{name}: {activity} em {city}. Conheça os serviços e peça seu orçamento.",
+  "seo_description_no_city": "{name}: {activity}. Conheça os serviços e peça seu orçamento.",
+  "legacy_paths": {
+    "/services": "/servicos",
+    "/contact": "/contato",
+    "/about": "/",
+    "/pricing": "/contato"
+  },
+  "default_services": [
+    "retractable-awnings",
+    "fixed-awnings",
+    "polycarbonate-roofs",
+    "gutters"
+  ],
+  "hero_image": "/images/toldos/hero.jpg"
+}

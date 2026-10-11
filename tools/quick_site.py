@@ -23,6 +23,7 @@ TEMPLATES = {
     'climatizacao': {'name': 'Climatização · design base', 'path': ENGINE, 'segment': 'climatizacao', 'dist': 'dist-climatizacao'},
     'chaveiros': {'name': 'Chaveiros · design base', 'path': ENGINE, 'segment': 'chaveiros', 'dist': 'dist-chaveiros'},
     'vidracaria': {'name': 'Vidraçaria · design base', 'path': ENGINE, 'segment': 'vidracaria', 'dist': 'dist-vidracaria'},
+    'toldos': {'name': 'Toldos e coberturas · design base', 'path': ENGINE, 'segment': 'toldos', 'dist': 'dist-toldos'},
 }
 
 

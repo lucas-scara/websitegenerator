@@ -377,4 +377,85 @@ class VidracariaProfileTests(unittest.TestCase):
         self.assertFalse((dist / 'images' / 'chaveiros').exists())
 
 
+class ToldosProfileTests(unittest.TestCase):
+    def test_profile_is_valid_and_defaults_are_minimal(self):
+        prof = quick.profile('toldos')
+        self.assertEqual(prof['segment']['id'], 'toldos')
+        self.assertEqual(prof['segment']['default_services'], ['retractable-awnings', 'fixed-awnings', 'polycarbonate-roofs', 'gutters'])
+        self.assertTrue(set(prof['segment']['default_services']) <= set(prof['catalog']))
+        self.assertRegex(prof['segment']['default_theme_color'], r'^#[0-9a-f]{6}$')
+        for path in prof['catalog'].values():
+            self.assertRegex(path, r'^/[a-z0-9-]+$')
+            self.assertNotRegex(path, r'awning|retractable|fixed|polycarbonate|roof|gutter|flashing|repair|cleaning')
+        self.assertFalse(set(prof['catalog']) & set(quick.profile('electrician')['catalog']))
+        self.assertFalse(set(prof['catalog']) & set(quick.profile('serralheria')['catalog']))
+        self.assertFalse(set(prof['catalog']) & set(quick.profile('climatizacao')['catalog']))
+        self.assertFalse(set(prof['catalog']) & set(quick.profile('chaveiros')['catalog']))
+        self.assertFalse(set(prof['catalog']) & set(quick.profile('vidracaria')['catalog']))
+
+    def test_preset_covers_catalog_without_invented_claims(self):
+        text = (quick.profile('toldos')['folder'] / 'preset.js').read_text()
+        for service_id in quick.profile('toldos')['catalog']:
+            self.assertIn("'%s':" % service_id, text)
+        for term in ('projetos realizados', 'garantia', 'norma', 'impermeabil', 'resistên', 'vedaç', 'infiltraç', '24h', '24 horas', 'certificad', 'R$', 'autorizada', 'emergência', 'emergencia', 'urgên', 'imediat', 'ligar agora'):
+            with self.subTest(term=term):
+                self.assertNotIn(term, text.lower())
+
+    def test_stock_photos_are_free_and_labelled_illustrative(self):
+        folder = quick.profile('toldos')['folder']
+        for item in json.loads((folder / 'stock-images.json').read_text()):
+            self.assertEqual(item['license'], 'https://unsplash.com/license')
+            self.assertNotIn('plus.unsplash.com', item['image'])
+            self.assertTrue((ENGINE_PUBLIC / item['file']).exists())
+        for alt in re.findall(r"alt: '([^']+)'", (folder / 'preset.js').read_text()):
+            self.assertIn('imagem ilustrativa', alt)
+
+    def test_toldos_site_uses_its_own_build_and_defaults(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(quick.subprocess, 'run', side_effect=AssertionError('Unexpected build')):
+            home = quick.create({'name': 'Toldos Teste', 'phone': '(14) 99712-3456', 'city': 'Bauru', 'state': 'SP', 'template': 'toldos'}, folder)
+            site = Path(home['site'])
+            business = (site / 'business.js').read_text()
+            self.assertIn('#c2410c', business)
+            for service_id in quick.profile('toldos')['segment']['default_services']:
+                self.assertIn(service_id, business)
+            for other in ('ev-charging', 'metal-gates', 'split-installation', 'door-opening', 'metal-roofs', 'pergolas', 'flashing', 'gutter-repair', 'gutter-cleaning'):
+                self.assertNotIn(other, business)
+            self.assertNotIn('eletricista', (site / 'index.html').read_text().lower())
+            self.assertFalse((site / 'images' / 'electrician').exists())
+            self.assertFalse((site / 'images' / 'serralheria').exists())
+            self.assertFalse((site / 'images' / 'climatizacao').exists())
+            self.assertFalse((site / 'images' / 'chaveiros').exists())
+            self.assertFalse((site / 'images' / 'vidracaria').exists())
+
+    def test_other_segments_ids_are_rejected_for_toldos(self):
+        for bad in ('ev-charging', 'metal-gates', 'split-installation', 'door-opening'):
+            with self.assertRaisesRegex(ValueError, 'enabled_services'):
+                quick.validate({'name': 'X', 'phone': '123456789', 'template': 'toldos', 'enabled_services': [bad]})
+
+    def test_toldos_build_does_not_ship_other_segments(self):
+        dist = quick.profile('toldos')['dist']
+        text = '\n'.join(p.read_text(errors='ignore') for p in dist.rglob('*') if p.suffix in ('.js', '.html', '.css'))
+        for term in ('Eletricista', 'Quadro de distribuição', 'Portões de ferro', '/images/electrician', '/images/serralheria', '/images/climatizacao', '/images/chaveiros', '/images/vidracaria'):
+            with self.subTest(term=term):
+                self.assertNotIn(term, text)
+        self.assertFalse((dist / 'images' / 'electrician').exists())
+        self.assertFalse((dist / 'images' / 'serralheria').exists())
+        self.assertFalse((dist / 'images' / 'climatizacao').exists())
+        self.assertFalse((dist / 'images' / 'chaveiros').exists())
+        self.assertFalse((dist / 'images' / 'vidracaria').exists())
+
+    def test_service_groups_stay_independent(self):
+        catalog = quick.profile('toldos')['catalog']
+        text = (quick.profile('toldos')['folder'] / 'preset.js').read_text()
+        groups = {'awnings': ('retractable-awnings', 'fixed-awnings'), 'roofs': ('polycarbonate-roofs', 'metal-roofs', 'pergolas'), 'gutters': ('gutters', 'flashing', 'gutter-repair', 'gutter-cleaning')}
+        self.assertEqual(set(sum(groups.values(), ())), set(catalog))
+        for ids in groups.values():
+            quick.validate({'name': 'X', 'phone': '123456789', 'template': 'toldos', 'enabled_services': list(ids)})
+        for term in ('calha', 'toldo'):
+            for service_id in groups['roofs']:
+                block = text.split("'%s': {" % service_id)[1].split('\n    },')[0].split('\n', 2)[2].lower()  # skip the image path line
+                with self.subTest(service=service_id, term=term):
+                    self.assertNotIn(term, block)
+
+
 if __name__=='__main__':unittest.main()
