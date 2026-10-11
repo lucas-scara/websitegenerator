@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Siren, HousePlus, Hammer, Wrench, BatteryCharging, Plug, Gauge, Zap, Box, ShieldAlert, Layers, LayoutGrid, DoorClosed, DoorOpen, Fence, Flame, Ruler, Construction, Radio, Hand, Grid3x3, Footprints, Snowflake, Fan, Sparkles, ClipboardCheck, Building2, Cable, ThermometerSnowflake } from 'lucide-react'
+import { ArrowRight, Siren, HousePlus, Hammer, Wrench, BatteryCharging, Plug, Gauge, Zap, Box, ShieldAlert, Layers, LayoutGrid, DoorClosed, DoorOpen, Fence, Flame, Ruler, Construction, Radio, Hand, Grid3x3, Footprints, Snowflake, Fan, Sparkles, ClipboardCheck, Building2, Cable, ThermometerSnowflake, KeyRound, Lock, LockKeyhole, Car, Vault, Smartphone } from 'lucide-react'
 import Reveal from '../lib/Reveal.jsx'
 
-const ICONS = { Siren, HousePlus, Hammer, Wrench, BatteryCharging, Plug, Gauge, Zap, Box, ShieldAlert, Layers, LayoutGrid, DoorClosed, DoorOpen, Fence, Flame, Ruler, Construction, Radio, Hand, Grid3x3, Footprints, Snowflake, Fan, Sparkles, ClipboardCheck, Building2, Cable, ThermometerSnowflake }
+const ICONS = { Siren, HousePlus, Hammer, Wrench, BatteryCharging, Plug, Gauge, Zap, Box, ShieldAlert, Layers, LayoutGrid, DoorClosed, DoorOpen, Fence, Flame, Ruler, Construction, Radio, Hand, Grid3x3, Footprints, Snowflake, Fan, Sparkles, ClipboardCheck, Building2, Cable, ThermometerSnowflake, KeyRound, Lock, LockKeyhole, Car, Vault, Smartphone }
 
 /* Photo service cards built from the resolved service list. */
 export default function ServicesGrid({ items, className = '' }) {

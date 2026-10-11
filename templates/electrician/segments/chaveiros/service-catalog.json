@@ -1,0 +1,9 @@
+{
+  "door-opening": "/abertura-de-portas",
+  "key-duplication": "/copia-de-chaves",
+  "lock-replacement": "/troca-de-fechaduras",
+  "lock-installation": "/instalacao-de-fechaduras",
+  "car-keys": "/chaves-automotivas",
+  "digital-locks": "/fechaduras-digitais",
+  "safes": "/cofres"
+}
