@@ -90,6 +90,23 @@ class QuickSiteTests(unittest.TestCase):
             self.assertIn('og:title" content="Eletricista em Bauru | Elétrica &lt;Silva&gt;"', page)
             self.assertNotIn('Your Company', page)
 
+    def test_favicon_is_the_page_logo_in_the_theme_color(self):
+        # Colors match deriveTheme('#e11d48') in src/themeMath.js: dark [203,26,65], light [245,183,197].
+        with tempfile.TemporaryDirectory() as folder:
+            result = quick.create({'name': 'Teste', 'phone': '(14) 99712-3456', 'theme_color': '#E11D48'}, folder)
+            site = Path(result['site'])
+            icon = (site / 'favicon.svg').read_text()
+            for color in ('#e11d48', '#cb1a41', '#f5b7c5'):
+                self.assertIn(color, icon)
+            self.assertNotIn('#F7B500', icon)
+            page = (site / 'index.html').read_text()
+            self.assertIn('name="theme-color" content="#e11d48"', page)
+            self.assertNotIn('alternate icon', page)
+        logo = (quick.TEMPLATES['electrician']['path'] / 'src/components/Logo.jsx').read_text()
+        for path in ('M11 23.5 24 12l13 11.5M14 21.5V37h20V21.5', 'M25.6 19.5 20 28.5h5l-1.6 8L30 26.5h-5.2z'):
+            self.assertIn(path, logo)
+            self.assertIn(path, quick.render_favicon('#e11d48'))
+
     def test_prepared_build_has_no_legacy_or_placeholder_content(self):
         dist = quick.TEMPLATES['electrician']['path'] / 'dist'
         text = '\n'.join(p.read_text(errors='ignore') for p in dist.rglob('*') if p.suffix in ('.js', '.html', '.css') or p.name == '_redirects')

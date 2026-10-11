@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import html
 import json
+import math
 from pathlib import Path
 import re
 import shutil
@@ -163,6 +164,33 @@ def validate(data):
     return template, {k: v for k, v in result.items() if v or k in ('enabled_services', 'preview') or v is False}
 
 
+def _luminance(rgb):
+    lin = [(c / 255 / 12.92) if c / 255 <= 0.04045 else ((c / 255 + 0.055) / 1.055) ** 2.4 for c in rgb]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
+def _mix(rgb, target, amount):
+    return [math.floor(c + (t - c) * amount + 0.5) for c, t in zip(rgb, target)]
+
+
+def render_favicon(theme_color):
+    """Same mark as components/Logo.jsx (tile gradient, white house, light bolt), colored like the page theme.
+    Mirrors deriveTheme() in src/themeMath.js so the favicon, the logo and the theme never disagree."""
+    rgb = [int(theme_color[i:i + 2], 16) for i in (1, 3, 5)]
+    dark = rgb
+    while _luminance(dark) > 0.16:
+        dark = _mix(dark, [0, 0, 0], 0.1)
+    light = rgb
+    while _luminance(light) < 0.55:
+        light = _mix(light, [255, 255, 255], 0.12)
+    hexa = lambda c: '#%02x%02x%02x' % tuple(c)
+    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">'
+            f'<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{hexa(rgb)}"/><stop offset="1" stop-color="{hexa(dark)}"/></linearGradient></defs>'
+            '<rect width="48" height="48" rx="13" fill="url(#g)"/>'
+            '<path d="M11 23.5 24 12l13 11.5M14 21.5V37h20V21.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
+            f'<path d="M25.6 19.5 20 28.5h5l-1.6 8L30 26.5h-5.2z" fill="{hexa(light)}"/></svg>\n')
+
+
 def render_head(page, business):
     """Static <title>/description/OG per business: link previews (WhatsApp, e-mail) never run JavaScript."""
     city = business.get('city', '')
@@ -174,6 +202,7 @@ def render_head(page, business):
     page = re.sub(r'<title>.*?</title>', lambda _: f'<title>{esc(title)}</title>', page, count=1, flags=re.S)
     for pattern, value in ((r'name="description"', description), (r'property="og:title"', title), (r'property="og:description"', description), (r'property="og:site_name"', business['name'])):
         page = re.sub(r'(<meta ' + pattern + r' content=")[^"]*(")', lambda m: m.group(1) + esc(value) + m.group(2), page, count=1)
+    page = re.sub(r'(<meta name="theme-color" content=")[^"]*(")', lambda m: m.group(1) + business.get('theme_color', DEFAULT_THEME_COLOR) + m.group(2), page, count=1)
     return page.replace('Your Company', esc(business['name']))
 
 
@@ -197,6 +226,7 @@ def create(data, output_root=None):
         shutil.copytree(cache, site, ignore=shutil.ignore_patterns('.prepared.json'))
         # Data lives in its own JavaScript file. JSON escaping prevents source injection.
         (site / 'business.js').write_text('window.WEBSITE_BUSINESS = ' + json.dumps(business, ensure_ascii=True) + ';\n')
+        (site / 'favicon.svg').write_text(render_favicon(business.get('theme_color', DEFAULT_THEME_COLOR)))
         (site / 'index.html').write_text(render_head((site / 'index.html').read_text(), business))
         shutil.copyfile(source / 'vercel.json', site / 'vercel.json')
         shutil.copyfile(source / 'stock-images.json', staging / 'stock-images.json')
