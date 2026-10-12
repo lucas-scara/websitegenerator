@@ -2,6 +2,9 @@
 
 Leia [o procedimento oficial](docs/workflows/PROSPECCAO.md) antes de executar um lote. O dashboard registra cidade, segmento e meta de prévias verificadas no SQLite; o Codex coordena a execução quando o operador pedir. O dashboard não inicia agentes. A conclusão automática do lote não inclui contato comercial.
 
+Para distribuição computacional entre modelos e subagentes, siga [MODEL-ROUTING](docs/workflows/MODEL-ROUTING.md). Delegue somente trabalho independente e delimitado; mantenha decisões comerciais e transições do ledger com o coordenador.
+Ao invocar subagentes pelo fluxo genérico, informe modelo e esforço explicitamente: `gpt-6-luna`/`low` para descoberta e verificação, `gpt-6-sol`/`medium` para qualificação e QA. O nome da tarefa e os defaults TOML não ativaram o roteamento nesta versão do CLI; confira os metadados reais da sessão.
+
 Trabalhe em branch, nunca commite na `main`, faça merge ou force-push. Autor dos commits: `Lucas Scaranello <lucasscaranello@gmail.com>`; verifique com `git var GIT_AUTHOR_IDENT`. Abra PR para revisão humana. Preserve `data/`, `runs/`, identidades, lotes, contatos, submissões e opt-outs. Não publique prospectos reais nem segredos no Git. Não use `clear-all` no banco durável.
 
 Use o motor multissegmento em `templates/electrician/segments/`, `tools/quick_site.py` e o projeto Vercel existente `scarasoft-previas`. Não crie backend, CRM, fila externa, projeto Vercel por empresa ou novo orquestrador. Não altere templates visuais sem necessidade comprovada. A fonte de verdade para verificação de URLs é [VERIFICACAO-URLS](docs/VERIFICACAO-URLS.md); para captura Firecrawl, [firecrawl-scouting](references/firecrawl-scouting.md); para geração e publicação, [PILOTO-PREVIAS](docs/PILOTO-PREVIAS.md). Documentos de pilotos anteriores são histórico, não instruções atuais.

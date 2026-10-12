@@ -1,0 +1,25 @@
+# Project-scoped routing; does not change ~/.codex/config.toml.
+model = "gpt-6-sol"
+model_reasoning_effort = "medium"
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 3
+default_subagent_model = "gpt-6-luna"
+default_subagent_reasoning_effort = "low"
+
+[agents.discovery]
+description = "Descoberta pública de candidatos; devolve fatos e URLs em JSON, sem classificação comercial."
+config_file = "agents/discovery.toml"
+
+[agents.verification]
+description = "Verifica identidade, presença e contatos públicos; separa confirmado, presumido e desconhecido."
+config_file = "agents/verification.toml"
+
+[agents.qualification]
+description = "Qualifica A/B/C/D com evidências e sinaliza revisão humana; não usa score numérico."
+config_file = "agents/qualification.toml"
+
+[agents.quality_review]
+description = "Audita fatos e qualidade visual de prévias; evita repetir verificações determinísticas aprovadas."
+config_file = "agents/quality-review.toml"

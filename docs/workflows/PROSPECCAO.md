@@ -2,6 +2,8 @@
 
 Este é o procedimento de execução de lotes da scarasoft. O dashboard apenas cria o pedido em `data/revamp.sqlite3`; uma sessão do Codex coordena as etapas. Nesta fase, encerrar o lote significa publicar e verificar a quantidade pedida de prévias, sem contato comercial. Dados reais, capturas, consultas, JSONs de empresas e IDs de deployment ficam em `runs/` e `data/`, ignorados pelo Git.
 
+A distribuição de tarefas entre modelos e subagentes segue [MODEL-ROUTING.md](MODEL-ROUTING.md); este procedimento continua sendo a fonte das regras comerciais e das transições do ledger.
+
 ## 1. Abrir e planejar o lote
 
 Na raiz do projeto, rode `python3 tools/control.py state` e escolha um lote `queued` ou `running` pelo ID. O operador também pode criar um pedido com `python3 tools/control.py batch --industry serralheria --city 'Bauru, SP' --count 3`; `--industry all` significa todos os perfis de `python3 tools/quick_site.py templates`. O dashboard mostra os mesmos perfis. A quantidade é a meta de prévias públicas verificadas. Se o lote for `all`, distribua a primeira rodada por segmentos distintos, em ordem dos IDs disponíveis, e depois preencha a meta com as melhores oportunidades A e B, independentemente do segmento. Não há cota por categoria ou segmento. Registre o plano em `runs/scouting/BATCH_ID/plan.json`.
