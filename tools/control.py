@@ -54,45 +54,87 @@ def identity(value):
         return 'phone:' + raw
     raise ValueError('Identity must use domain:, phone: or email:')
 
+SCHEMA_VERSION = 2
+
+
+def migrate(con, hook=None):
+    """Atomically initialize or migrate the ledger; keep FK checks on for normal work."""
+    version = con.execute('PRAGMA user_version').fetchone()[0]
+    if version > SCHEMA_VERSION:
+        raise ValueError('Ledger schema is newer than this application')
+    if version == SCHEMA_VERSION:
+        domain_column = next(row for row in con.execute('PRAGMA table_info(jobs)') if row['name'] == 'domain')
+        if domain_column['notnull']:
+            raise ValueError('Ledger schema version and jobs.domain disagree')
+        return
+    # SQLite cannot change foreign_keys inside a transaction. Turn it off only
+    # for the table rebuild; every exit path closes or restores this connection.
+    con.execute('PRAGMA foreign_keys=OFF')
+    try:
+        con.execute('BEGIN IMMEDIATE')
+        version = con.execute('PRAGMA user_version').fetchone()[0]
+        if version > SCHEMA_VERSION:
+            raise ValueError('Ledger schema is newer than this application')
+        if version < SCHEMA_VERSION:
+            if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='jobs_new'").fetchone():
+                raise ValueError('Unexpected jobs_new table; inspect ledger before migration')
+            con.execute("""CREATE TABLE IF NOT EXISTS batches(id TEXT PRIMARY KEY, industry TEXT NOT NULL, city TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, requested_count INTEGER NOT NULL DEFAULT 3)""")
+            if 'requested_count' not in {row['name'] for row in con.execute('PRAGMA table_info(batches)')}:
+                con.execute('ALTER TABLE batches ADD COLUMN requested_count INTEGER NOT NULL DEFAULT 3')
+            exists = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='jobs'").fetchone()
+            jobs_schema = """(id TEXT PRIMARY KEY,batch_id TEXT NOT NULL REFERENCES batches(id),name TEXT NOT NULL,url TEXT NOT NULL,domain TEXT UNIQUE,stage TEXT NOT NULL,worker TEXT,detail TEXT DEFAULT '',reason TEXT DEFAULT '',preview_url TEXT DEFAULT '',contact_status TEXT DEFAULT 'not_sent',data TEXT NOT NULL DEFAULT '{}',updated_at TEXT NOT NULL)"""
+            if not exists:
+                con.execute('CREATE TABLE jobs' + jobs_schema)
+            else:
+                domain_column = next(row for row in con.execute('PRAGMA table_info(jobs)') if row['name'] == 'domain')
+                if domain_column['notnull']:
+                    before = con.execute('SELECT COUNT(*) FROM jobs').fetchone()[0]
+                    con.execute('CREATE TABLE jobs_new' + jobs_schema)
+                    con.execute('INSERT INTO jobs_new SELECT * FROM jobs')
+                    if hook: hook('copied')
+                    con.execute('DROP TABLE jobs')
+                    if hook: hook('dropped')
+                    con.execute('ALTER TABLE jobs_new RENAME TO jobs')
+                    if con.execute('SELECT COUNT(*) FROM jobs').fetchone()[0] != before:
+                        raise ValueError('Job count changed during migration')
+            con.execute("""CREATE TABLE IF NOT EXISTS identities(identity TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES jobs(id))""")
+            con.execute("""CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,job_id TEXT,message TEXT NOT NULL,created_at TEXT NOT NULL)""")
+            con.execute("""CREATE TABLE IF NOT EXISTS workers(id TEXT PRIMARY KEY,job_id TEXT,status TEXT NOT NULL,updated_at TEXT NOT NULL)""")
+            con.execute("""CREATE TABLE IF NOT EXISTS submissions(job_id TEXT PRIMARY KEY REFERENCES jobs(id),message TEXT NOT NULL,message_hash TEXT NOT NULL,form_url TEXT NOT NULL,status TEXT NOT NULL,evidence TEXT,created_at TEXT NOT NULL)""")
+            con.execute("""CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY,value TEXT NOT NULL)""")
+            con.execute("INSERT OR IGNORE INTO config VALUES ('max_workers','3')")
+            if con.execute('PRAGMA foreign_key_check').fetchone():
+                raise ValueError('Ledger foreign key check failed')
+            if con.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+                raise ValueError('Ledger integrity check failed')
+            con.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
+            if hook: hook('before_commit')
+        con.execute('COMMIT')
+    except BaseException:
+        if con.in_transaction: con.execute('ROLLBACK')
+        raise
+    finally:
+        con.execute('PRAGMA foreign_keys=ON')
+        if con.execute('PRAGMA foreign_keys').fetchone()[0] != 1:
+            raise ValueError('Failed to enable SQLite foreign keys')
+
+
 @contextlib.contextmanager
 def connect():
     DB.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB, timeout=15, isolation_level=None)
     con.row_factory = sqlite3.Row
-    con.execute('PRAGMA journal_mode=WAL')
-    con.execute('PRAGMA foreign_keys=OFF')
-    con.executescript('''
-    CREATE TABLE IF NOT EXISTS batches(id TEXT PRIMARY KEY, industry TEXT NOT NULL, city TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, requested_count INTEGER NOT NULL DEFAULT 3);
-    CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,batch_id TEXT NOT NULL REFERENCES batches(id),name TEXT NOT NULL,url TEXT NOT NULL,domain TEXT UNIQUE NOT NULL,stage TEXT NOT NULL,worker TEXT,detail TEXT DEFAULT '',reason TEXT DEFAULT '',preview_url TEXT DEFAULT '',contact_status TEXT DEFAULT 'not_sent',data TEXT NOT NULL DEFAULT '{}',updated_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS identities(identity TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES jobs(id));
-    CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,job_id TEXT,message TEXT NOT NULL,created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS workers(id TEXT PRIMARY KEY,job_id TEXT,status TEXT NOT NULL,updated_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS submissions(job_id TEXT PRIMARY KEY REFERENCES jobs(id),message TEXT NOT NULL,message_hash TEXT NOT NULL,form_url TEXT NOT NULL,status TEXT NOT NULL,evidence TEXT,created_at TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-    INSERT OR IGNORE INTO config VALUES ('max_workers','3');
-    ''')
-    # The original ledger required a unique, non-null domain. Rebuild only this table
-    # once so first-site opportunities can store NULL without inventing a domain.
-    domain_column = next(row for row in con.execute('PRAGMA table_info(jobs)') if row['name'] == 'domain')
-    if domain_column['notnull']:
-        con.executescript('''
-        CREATE TABLE jobs_new(id TEXT PRIMARY KEY,batch_id TEXT NOT NULL REFERENCES batches(id),name TEXT NOT NULL,url TEXT NOT NULL,domain TEXT UNIQUE,stage TEXT NOT NULL,worker TEXT,detail TEXT DEFAULT '',reason TEXT DEFAULT '',preview_url TEXT DEFAULT '',contact_status TEXT DEFAULT 'not_sent',data TEXT NOT NULL DEFAULT '{}',updated_at TEXT NOT NULL);
-        INSERT INTO jobs_new SELECT * FROM jobs;
-        DROP TABLE jobs;
-        ALTER TABLE jobs_new RENAME TO jobs;
-        ''')
-    if con.execute('PRAGMA foreign_key_check').fetchone():
-        raise ValueError('Ledger foreign key check failed')
-    con.execute('PRAGMA foreign_keys=ON')
-    if 'requested_count' not in {row['name'] for row in con.execute('PRAGMA table_info(batches)')}:
-        con.execute('ALTER TABLE batches ADD COLUMN requested_count INTEGER NOT NULL DEFAULT 3')
     try:
+        con.execute('PRAGMA journal_mode=WAL')
+        con.execute('PRAGMA foreign_keys=ON')
+        migrate(con)
         con.execute('BEGIN IMMEDIATE')
-        yield con
-        con.execute('COMMIT')
-    except BaseException:
-        if con.in_transaction: con.execute('ROLLBACK')
-        raise
+        try:
+            yield con
+            con.execute('COMMIT')
+        except BaseException:
+            if con.in_transaction: con.execute('ROLLBACK')
+            raise
     finally:
         con.close()
 
@@ -102,15 +144,16 @@ def event(c, job, message):
 def production_status(job):
     data = json.loads(job['data']) if isinstance(job['data'], str) else job['data']
     if (data.get('preview_verified') is True and data.get('qa_passed') is True
-            and isinstance(data.get('deployment'), dict) and data['deployment'].get('id')
-            and data['deployment'].get('project') == 'scarasoft-previas'
+            and (job['stage'] in ('ready','contacting','complete','sent','uncertain','manual','simulated')
+                 or (isinstance(data.get('deployment'), dict) and data['deployment'].get('id')
+                     and data['deployment'].get('project') == 'scarasoft-previas'))
             and job['preview_url'].startswith('https://')):
         return 'published'
     if job['stage'] in ('blocked', 'skipped') or data.get('commercial_category') == 'descartada':
         return 'pending'
     if job['stage'] in ('building', 'checking', 'deploying', 'ready', 'contacting', 'complete', 'sent', 'manual', 'simulated'):
         return 'generated'
-    if data.get('commercial_category') in ('A_prioritaria', 'B_promissora', 'C_potencial'):
+    if job['stage'] in ('qualified','extracting') and data.get('commercial_category') in ('A_prioritaria', 'B_promissora', 'C_potencial'):
         return 'qualified'
     if data.get('presence_status') or data.get('verification'):
         return 'verified'
@@ -122,23 +165,32 @@ def batch_progress(c, bid):
     jobs = list(c.execute('SELECT * FROM jobs WHERE batch_id=?', (bid,)))
     statuses = [production_status(j) for j in jobs]
     published = statuses.count('published')
-    active = sum((j['worker'] is not None or status != 'published')
-                 and j['stage'] not in ('blocked','skipped','manual','simulated','complete','sent','uncertain')
-                 for j, status in zip(jobs, statuses))
+    running_jobs = {r[0] for r in c.execute("SELECT workers.job_id FROM workers JOIN jobs ON jobs.id=workers.job_id WHERE jobs.batch_id=? AND workers.status='running'", (bid,))}
+    worker_count = len(running_jobs)
+    evaluating = sum(j['stage'] in ('queued','reviewing','verified','qualified','extracting') for j in jobs)
+    producing = sum(j['stage'] in ('building','checking','deploying','ready') and status != 'published'
+                    for j, status in zip(jobs, statuses))
+    unfinished = worker_count + producing
     counts = {stage: sum(j['stage'] == stage for j in jobs) for stage in STAGES}
     remaining = max(0, row['requested_count'] - published)
-    return {'discovered_count': len(jobs), 'verified_count': sum(x in ('verified','qualified','generated','published') for x in statuses),
+    pending = sum(status in ('pending','discovered') or (json.loads(j['data']).get('identity_review') or {}).get('status') in ('pending','same')
+                  or json.loads(j['data']).get('commercial_category') == 'D_pendente'
+                  for j, status in zip(jobs, statuses))
+    return {'discovered_count': len(jobs), 'candidate_count': len(jobs),
+            'evaluating_count': evaluating, 'production_count': producing, 'worker_count': worker_count,
+            'unfinished_count': unfinished,
+            'verified_count': sum(x in ('verified','qualified','generated','published') for x in statuses),
             'qualified_count': sum(x in ('qualified','generated','published') for x in statuses),
             'generated_count': sum(x in ('generated','published') for x in statuses),
-            'published_count': published, 'pending_count': sum(x == 'pending' for x in statuses),
-            'completed_count': published, 'active_count': active, 'remaining_count': remaining,
-            'manual_count': counts.get('manual', 0), 'available_count': remaining}
+            'published_count': published, 'pending_count': pending,
+            'completed_count': published, 'active_count': worker_count, 'remaining_count': remaining,
+            'manual_count': counts.get('manual', 0), 'available_count': max(0, remaining - producing)}
 
 def batch_status(bid, status):
     if status not in ('running', 'complete', 'blocked', 'exhausted'): raise ValueError('Invalid batch status')
     with connect() as c:
         progress = batch_progress(c, bid)
-        if status in ('complete', 'exhausted') and progress['active_count']:
+        if status in ('complete', 'exhausted') and progress['unfinished_count']:
             raise ValueError('Batch has unfinished jobs')
         if status == 'complete' and progress['remaining_count']:
             raise ValueError(f"Batch needs {progress['remaining_count']} more verified public previews")
@@ -181,6 +233,8 @@ def cancel_batch(bid, reason):
             stage = 'uncertain' if attempted else 'skipped'
             detail = f'{reason} No outreach submission was made.' if not attempted else f'{reason} Submission history retained as uncertain; do not retry.'
             c.execute('UPDATE jobs SET stage=?,detail=?,worker=NULL,updated_at=?,contact_status=? WHERE id=?', (stage, detail, now(), 'uncertain' if attempted else 'not_sent', job['id']))
+            if attempted:
+                c.execute("UPDATE submissions SET status='uncertain',evidence=? WHERE job_id=?", (detail, job['id']))
             c.execute("UPDATE workers SET status='idle',updated_at=? WHERE job_id=?", (now(), job['id']))
             event(c, job['id'], f'Batch cancelled: {detail}')
         c.execute("UPDATE batches SET status='cancelled' WHERE id=?", (bid,))
@@ -204,7 +258,79 @@ def business_identity(name, city):
     def norm(value):
         value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode().lower()
         return re.sub(r'[^a-z0-9]+', '-', value).strip('-')
-    return f'business:{norm(name)}:{norm(city)}'
+    return f"business:{norm(name)}:{norm(city.partition(',')[0])}"
+
+def evidence_url(value):
+    if not isinstance(value, str) or not value.startswith(('https://','http://')):
+        raise ValueError('Evidence source must be an HTTP(S) URL')
+    domain(value)
+
+def checked_date(value):
+    if not isinstance(value, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value):
+        raise ValueError('Evidence needs checked_at as YYYY-MM-DD')
+    dt.date.fromisoformat(value)
+
+def validate_verification(value):
+    if not isinstance(value, dict): raise ValueError('Verification must be an object')
+    checked_date(value.get('checked_at'))
+    sources = value.get('sources')
+    if not isinstance(sources, list) or not sources: raise ValueError('Verification needs sources')
+    for source in sources: evidence_url(source)
+    if 'queries' in value and (not isinstance(value['queries'], list) or any(not isinstance(q,str) or not q.strip() for q in value['queries'])):
+        raise ValueError('Invalid presence queries')
+
+def validate_contacts(value):
+    if not isinstance(value, dict): raise ValueError('Contacts must be an object')
+    phone = value.get('phone')
+    if phone is not None:
+        if not isinstance(phone, dict) or not phone.get('value'):
+            raise ValueError('Phone must include a value')
+        identity('phone:' + phone['value'])
+        evidence_url(phone.get('source'))
+        checked_date(phone.get('checked_at'))
+    for channel in ('email','form'):
+        record = value.get(channel)
+        if not isinstance(record, dict) or record.get('status') not in ('encontrado','nao_encontrado','nao_verificado'):
+            raise ValueError(f'{channel} needs encontrado, nao_encontrado or nao_verificado')
+        if record['status'] != 'nao_verificado':
+            evidence_url(record.get('source'))
+            checked_date(record.get('checked_at'))
+        if channel == 'email' and record['status'] == 'encontrado':
+            identity('email:' + str(record.get('value', '')))
+        if channel == 'form' and record['status'] == 'encontrado':
+            evidence_url(record.get('url'))
+            if not isinstance(record.get('purpose'), str) or not record['purpose'].strip() or type(record.get('eligible')) is not bool or not isinstance(record.get('restrictions'), list):
+                raise ValueError('Found form needs URL, purpose, eligibility and restrictions')
+    whatsapp = value.get('whatsapp')
+    if whatsapp is not None:
+        if not isinstance(whatsapp, dict) or whatsapp.get('status') not in ('confirmado','presumido','nao_utiliza','nao_verificado'):
+            raise ValueError('Invalid WhatsApp status')
+        if whatsapp['status'] == 'presumido' and not phone:
+            raise ValueError('Presumed WhatsApp needs a public phone')
+        if whatsapp['status'] == 'confirmado':
+            identity('phone:' + str(whatsapp.get('value', '')))
+            evidence_url(whatsapp.get('source'))
+            checked_date(whatsapp.get('checked_at'))
+        if whatsapp['status'] == 'nao_utiliza':
+            evidence_url(whatsapp.get('source'))
+            checked_date(whatsapp.get('checked_at'))
+
+def validate_services(value, template):
+    if not isinstance(value, dict): raise ValueError('Services must be an object')
+    confirmed, excluded, evidence = value.get('confirmed', []), value.get('excluded', []), value.get('evidence', {})
+    if not isinstance(confirmed,list) or not isinstance(excluded,list) or not isinstance(evidence,dict):
+        raise ValueError('Invalid services evidence')
+    catalog = profile(template)['catalog']
+    defaults = profile(template)['segment']['default_services']
+    if any(not isinstance(s,str) or s not in catalog for s in confirmed + excluded):
+        raise ValueError('Service outside template catalog')
+    if len(confirmed) != len(set(confirmed)) or len(excluded) != len(set(excluded)) or set(confirmed) & set(excluded):
+        raise ValueError('Conflicting or duplicate services')
+    for service in set(excluded) | {s for s in confirmed if s not in defaults}:
+        item = evidence.get(service)
+        if not isinstance(item,dict) or not isinstance(item.get('observation'),str) or not item['observation'].strip():
+            raise ValueError('Service addition or exclusion needs observed evidence')
+        evidence_url(item.get('source'))
 
 def add(bid, name, url='', aliases=(), template=None):
     if not name or not name.strip(): raise ValueError('Business name required')
@@ -216,14 +342,42 @@ def add(bid, name, url='', aliases=(), template=None):
         chosen = template or row['industry']
         if chosen not in TEMPLATES or (row['industry'] != 'all' and chosen != row['industry']):
             raise ValueError('Choose the batch segment or an available template for all')
+        # Name and city are a review signal, never a unique identity. Homonyms
+        # can legitimately share both values across different businesses.
+        possible = [other['id'] for other in c.execute('''
+            SELECT jobs.id, jobs.name, batches.city FROM jobs
+            JOIN batches ON batches.id=jobs.batch_id''')
+            if business_identity(other['name'], other['city']) == business_identity(name, row['city'])]
         jid = ident('site')
-        keys = set([business_identity(name, row['city']), *(identity(a) for a in aliases)])
+        keys = set(identity(a) for a in aliases)
         if d: keys.add('domain:'+d)
+        if not keys and not possible:
+            review = {'status': 'pending', 'reason': 'No reliable domain, phone or email identity yet'}
+        elif possible:
+            review = {'status': 'pending', 'possible_matches': possible}
+        else:
+            review = {'status': 'clear'}
         c.execute('INSERT INTO jobs(id,batch_id,name,url,domain,stage,data,updated_at) VALUES(?,?,?,?,?,?,?,?)',
-                  (jid,bid,name.strip(),url or '',d,'queued',json.dumps({'template': chosen}),now()))
+                  (jid,bid,name.strip(),url or '',d,'queued',json.dumps({'template': chosen, 'identity_review': review}),now()))
         for key in keys: c.execute('INSERT INTO identities VALUES (?,?)',(key,jid))
-        event(c,jid,'Prospect registered; identities reserved.')
-        return {'id':jid}
+        event(c,jid,'Prospect registered; identity review pending.' if review['status'] == 'pending' else 'Prospect registered; reliable identities reserved.')
+        return {'id':jid, 'identity_review': review}
+
+def reserve_contact_identities(c, jid, contacts):
+    keys = []
+    if contacts.get('phone'):
+        keys.append(identity('phone:' + contacts['phone']['value']))
+    email = contacts.get('email') or {}
+    if email.get('status') == 'encontrado':
+        keys.append(identity('email:' + email['value']))
+    whatsapp = contacts.get('whatsapp') or {}
+    if whatsapp.get('status') == 'confirmado':
+        keys.append(identity('phone:' + whatsapp['value']))
+    for key in set(keys):
+        existing = c.execute('SELECT job_id FROM identities WHERE identity=?', (key,)).fetchone()
+        if existing and existing['job_id'] != jid:
+            raise ValueError(f'Contact identity already belongs to job {existing["job_id"]}; review duplicate')
+        if not existing: c.execute('INSERT INTO identities VALUES (?,?)', (key, jid))
 
 def own(c, jid, worker):
     j = c.execute('SELECT * FROM jobs WHERE id=?', (jid,)).fetchone()
@@ -238,6 +392,9 @@ def claim(bid, worker):
         batch_row = c.execute('SELECT status FROM batches WHERE id=?', (bid,)).fetchone()
         if not batch_row or batch_row['status'] in ('complete','cancelled'):
             raise ValueError('Batch is missing or closed')
+        progress = batch_progress(c, bid)
+        if progress['worker_count'] >= progress['remaining_count']:
+            raise ValueError('Batch worker capacity is covered by the preview target')
         if c.execute("SELECT 1 FROM workers WHERE id=? AND status='running'",(worker,)).fetchone(): raise ValueError('Worker already owns a running job')
         limit = int(c.execute("SELECT value FROM config WHERE key='max_workers'").fetchone()[0])
         if c.execute("SELECT COUNT(*) FROM workers WHERE status='running'").fetchone()[0]>=limit: raise ValueError('Worker capacity reached')
@@ -252,7 +409,7 @@ def claim(bid, worker):
 def update(jid, worker, stage=None, detail='', fields=None):
     fields = fields or {}
     if not isinstance(fields,dict): raise ValueError('Fields must be a JSON object')
-    allowed = {'reason','preview_url','qa_passed','preview_verified','source_urls','screenshots','browser_id','tab_id','workspace','booking_url','logo_decision','cost','failure','contact_url','qualification','seo_checked','outreach_mode','contact_email','contact_phone','template','presence_status','commercial_category','opportunity_type','verification','contacts','commercial_reason','discard_reason','deployment','services','qualified','qa_evidence'}
+    allowed = {'reason','preview_url','qa_passed','preview_verified','source_urls','screenshots','browser_id','tab_id','workspace','booking_url','logo_decision','cost','failure','contact_url','qualification','seo_checked','outreach_mode','contact_email','contact_phone','template','presence_status','commercial_category','opportunity_type','verification','contacts','commercial_reason','discard_reason','deployment','services','qualified','qa_evidence','identity_review'}
     if set(fields)-allowed: raise ValueError('Unknown fields: '+str(set(fields)-allowed))
     with connect() as c:
         j=own(c,jid,worker)
@@ -262,6 +419,13 @@ def update(jid, worker, stage=None, detail='', fields=None):
         if new!=j['stage'] and new not in NEXT.get(j['stage'],[]) + (['blocked','skipped'] if j['stage'] not in ('complete','sent','uncertain','blocked','skipped','manual','simulated','contacting') else []):
             raise ValueError('Invalid stage transition')
         data=json.loads(j['data']); data.update(fields)
+        if 'identity_review' in fields:
+            review = fields['identity_review']
+            if (not isinstance(review, dict) or review.get('status') not in ('distinct','same')
+                    or not isinstance(review.get('reason'), str) or not review['reason'].strip()
+                    or not isinstance(review.get('sources'), list) or not review['sources']):
+                raise ValueError('Identity review needs distinct/same, reason and sources')
+            for source in review['sources']: evidence_url(source)
         if 'template' in fields and (fields['template'] not in TEMPLATES or fields['template'] != data.get('template')):
             raise ValueError('Template is fixed when the prospect is added')
         if 'presence_status' in fields and fields['presence_status'] not in ('site_confirmado','site_inoperante','sem_site_confirmado','sem_site_potencial','presenca_inconclusiva'):
@@ -270,26 +434,34 @@ def update(jid, worker, stage=None, detail='', fields=None):
             raise ValueError('Invalid commercial category')
         if 'opportunity_type' in fields and fields['opportunity_type'] not in ('redesign','primeiro_site'):
             raise ValueError('Invalid opportunity type')
-        if data.get('commercial_category') and not data.get('commercial_reason'):
+        if data.get('commercial_category') and (not isinstance(data.get('commercial_reason'), str) or not data['commercial_reason'].strip()):
             raise ValueError('Commercial category needs an objective reason')
-        if data.get('commercial_category') == 'descartada' and not data.get('discard_reason'):
+        if data.get('commercial_category') == 'descartada' and (not isinstance(data.get('discard_reason'), str) or not data['discard_reason'].strip()):
             raise ValueError('Discard needs a reason')
-        if 'contacts' in fields:
-            contacts = fields['contacts']
-            if not isinstance(contacts, dict): raise ValueError('Contacts must be an object')
-            for channel in ('email', 'form'):
-                record = contacts.get(channel)
-                if record is not None and (not isinstance(record, dict) or record.get('status') not in ('encontrado', 'nao_encontrado', 'nao_verificado')):
-                    raise ValueError(f'{channel} needs encontrado, nao_encontrado or nao_verificado')
-                if isinstance(record, dict) and record.get('status') == 'encontrado' and not record.get('source'):
-                    raise ValueError(f'{channel} found needs a source')
+        if 'verification' in fields: validate_verification(fields['verification'])
+        if 'contacts' in fields: validate_contacts(fields['contacts'])
+        if 'services' in fields: validate_services(fields['services'], data['template'])
+        if 'contacts' in fields: reserve_contact_identities(c, jid, fields['contacts'])
         if new == 'qualified' and (data.get('commercial_category') not in ('A_prioritaria','B_promissora','C_potencial')
                                    or data.get('presence_status') not in ('site_confirmado','site_inoperante','sem_site_confirmado')
                                    or not isinstance(data.get('verification'), dict) or not data['verification'].get('sources')):
             raise ValueError('Essential commercial and presence evidence required for qualification')
+        if new == 'qualified' and data.get('identity_review', {}).get('status') in ('pending', 'same'):
+            raise ValueError('Ambiguous business identity needs documented distinct review')
+        if new == 'qualified':
+            validate_verification(data['verification'])
+            validate_contacts(data.get('contacts'))
+            contacts = data['contacts']
+            if not (contacts.get('phone') or (contacts.get('email') or {}).get('status') == 'encontrado'
+                    or (contacts.get('whatsapp') or {}).get('status') == 'confirmado'):
+                raise ValueError('A verified public contact is needed for preview generation')
+            if ((data['presence_status'] == 'sem_site_confirmado' and data.get('opportunity_type') != 'primeiro_site')
+                    or (data['presence_status'] in ('site_confirmado','site_inoperante') and data.get('opportunity_type') != 'redesign')):
+                raise ValueError('Opportunity type conflicts with verified digital presence')
         if new == 'qualified' and data.get('presence_status') == 'site_confirmado' and data.get('opportunity_type') == 'redesign':
-            findings = (data.get('qualification') or {}).get('findings', [])
-            if not findings or not data.get('screenshots'):
+            qualification = data.get('qualification')
+            findings = qualification.get('findings') if isinstance(qualification, dict) else None
+            if not isinstance(findings,list) or not any(isinstance(f,str) and f.strip() for f in findings) or not isinstance(data.get('screenshots'),list) or not data['screenshots']:
                 raise ValueError('Redesign needs observed visual findings and screenshots')
         if new == 'qualified' and data.get('presence_status') == 'sem_site_confirmado' and not data['verification'].get('queries'):
             raise ValueError('Confirmed first-site opportunity needs documented presence queries')
@@ -297,6 +469,8 @@ def update(jid, worker, stage=None, detail='', fields=None):
             raise ValueError('Commercial qualification required before generation')
         if new in ('building','checking','deploying','ready') and data.get('presence_status') not in ('site_confirmado','site_inoperante','sem_site_confirmado'):
             raise ValueError('Essential digital presence confirmation required')
+        if new == 'building' and j['stage'] != 'building' and batch_progress(c, j['batch_id'])['available_count'] < 1:
+            raise ValueError('Preview production slots are full; keep candidate qualified for a later replacement')
         if new != j['stage'] and new in ('building', 'checking'):
             data['qa_passed'] = False
             data['preview_verified'] = False
@@ -304,7 +478,9 @@ def update(jid, worker, stage=None, detail='', fields=None):
         if new=='ready' and (data.get('preview_verified') is not True or not data.get('preview_url',j['preview_url']).startswith('https://')): raise ValueError('Verified HTTPS preview required')
         if new=='ready' and (not isinstance(data.get('deployment'),dict) or not data['deployment'].get('id') or data['deployment'].get('project') != 'scarasoft-previas' or not data.get('qa_evidence')):
             raise ValueError('Deployment ID, approved project and QA evidence required')
-        c.execute('UPDATE jobs SET stage=?,detail=?,reason=?,preview_url=?,data=?,updated_at=? WHERE id=?',(new,detail or j['detail'],fields.get('reason',j['reason']),fields.get('preview_url',j['preview_url']),json.dumps(data),now(),jid))
+        c.execute('UPDATE jobs SET stage=?,detail=?,reason=?,preview_url=?,data=?,worker=?,updated_at=? WHERE id=?',
+                  (new,detail or j['detail'],fields.get('reason',j['reason']),fields.get('preview_url',j['preview_url']),json.dumps(data),
+                   None if new in ('blocked','skipped') else worker,now(),jid))
         c.execute('UPDATE workers SET updated_at=? WHERE id=?',(now(),worker))
         if new in ('blocked','skipped'): c.execute("UPDATE workers SET status='idle',updated_at=? WHERE id=?",(now(),worker))
         event(c,jid,detail or f'Stage: {new}')
@@ -347,25 +523,16 @@ def site_input(jid, output):
         batch_row = c.execute('SELECT city FROM batches WHERE id=?', (job['batch_id'],)).fetchone()
     template = data['template']
     contacts = data.get('contacts') or {}
+    validate_verification(data.get('verification'))
+    validate_contacts(contacts)
     phone = contacts.get('phone') or {}
     email = contacts.get('email') or {}
     whatsapp = contacts.get('whatsapp') or {}
-    if isinstance(phone, dict) and phone.get('value') and not phone.get('source'):
-        raise ValueError('Public phone needs a source')
-    if isinstance(email, dict) and email.get('status') == 'encontrado' and not email.get('source'):
-        raise ValueError('Public email needs a source')
     services = data.get('services') or {}
-    if not isinstance(services, dict): raise ValueError('Services must be an object')
-    catalog = profile(template)['catalog']
+    validate_services(services, template)
     defaults = profile(template)['segment']['default_services']
     excluded = services.get('excluded', [])
     confirmed = services.get('confirmed', [])
-    evidence = services.get('evidence', {})
-    if not isinstance(excluded,list) or not isinstance(confirmed,list) or not isinstance(evidence,dict):
-        raise ValueError('Invalid services evidence')
-    if any(s not in catalog for s in excluded + confirmed): raise ValueError('Service outside template catalog')
-    if any(s not in defaults and not evidence.get(s) for s in confirmed):
-        raise ValueError('Additional service needs explicit evidence')
     enabled = list(dict.fromkeys([s for s in defaults if s not in excluded] + [s for s in confirmed if s not in excluded]))
     city, _, state = batch_row['city'].rpartition(',')
     record = {'template': template, 'name': job['name'], 'city': city.strip() if city else batch_row['city'],
@@ -453,7 +620,7 @@ def contact_simulate(jid, worker, message, form_url):
         if c.execute('SELECT 1 FROM submissions WHERE job_id=?',(jid,)).fetchone():
             raise ValueError('A real submission attempt already exists')
         data['contact_simulation']={'message':message,'form_url':form_url,'created_at':now()}
-        c.execute("UPDATE jobs SET stage='simulated',contact_status='simulated',detail=?,data=?,updated_at=? WHERE id=?",
+        c.execute("UPDATE jobs SET stage='simulated',contact_status='simulated',detail=?,data=?,worker=NULL,updated_at=? WHERE id=?",
                   ('Mensagem preparada em simulação; nenhum formulário enviado.',json.dumps(data),now(),jid))
         c.execute("UPDATE workers SET status='idle',updated_at=? WHERE id=?",(now(),worker))
         event(c,jid,'Contato simulado; nenhum submit realizado.')
@@ -485,7 +652,7 @@ def contact_finish(jid,worker,status,evidence):
         j=own(c,jid,worker)
         if j['stage']!='contacting': raise ValueError('No submission in progress')
         c.execute('UPDATE submissions SET status=?,evidence=? WHERE job_id=?',(status,evidence,jid))
-        c.execute('UPDATE jobs SET stage=?,contact_status=?,detail=?,updated_at=? WHERE id=?',('complete' if status == 'submitted' else status,status,evidence,now(),jid))
+        c.execute('UPDATE jobs SET stage=?,contact_status=?,detail=?,worker=NULL,updated_at=? WHERE id=?',('complete' if status == 'submitted' else status,status,evidence,now(),jid))
         c.execute("UPDATE workers SET status='idle',updated_at=? WHERE id=?",(now(),worker))
         event(c,jid,f'Contact {status}: {evidence}')
         return {'id':jid,'status':status}
@@ -511,7 +678,7 @@ def manual_outreach(jid, worker, reason, message, email='', phone=''):
         data['manual_outreach'] = {'reason': reason.strip(), 'message': message, 'email': email,
                                   'phone': phone, 'source_urls': data['source_urls']}
         data['outreach_mode'] = 'manual'
-        c.execute("UPDATE jobs SET stage='manual', contact_status='manual_required', detail=?, data=?, updated_at=? WHERE id=?",
+        c.execute("UPDATE jobs SET stage='manual', contact_status='manual_required', detail=?, data=?, worker=NULL, updated_at=? WHERE id=?",
                   (reason.strip(), json.dumps(data), now(), jid))
         c.execute("UPDATE workers SET status='idle',updated_at=? WHERE id=?", (now(), worker))
         event(c, jid, 'Manual outreach required: ' + reason.strip())
