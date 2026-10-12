@@ -331,6 +331,8 @@ def validate_services(value, template):
         if not isinstance(item,dict) or not isinstance(item.get('observation'),str) or not item['observation'].strip():
             raise ValueError('Service addition or exclusion needs observed evidence')
         evidence_url(item.get('source'))
+        if service in excluded and service in defaults and item.get('contradiction') is not True:
+            raise ValueError('Default service exclusion needs an explicit documented contradiction')
 
 def add(bid, name, url='', aliases=(), template=None):
     if not name or not name.strip(): raise ValueError('Business name required')
