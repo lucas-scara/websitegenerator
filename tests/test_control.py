@@ -180,7 +180,7 @@ class WorkflowTests(unittest.TestCase):
         control.update(jid, 'codex', fields={'services': {
             'excluded': [defaults[0]], 'confirmed': [additional],
             'evidence': {additional: {'source': 'https://ficticia.example', 'observation': 'Service listed'},
-                         defaults[0]: {'source': 'https://ficticia.example', 'observation': 'Business explicitly excludes it'}}}})
+                         defaults[0]: {'source': 'https://ficticia.example', 'observation': 'Business explicitly excludes it', 'contradiction': True}}}})
         output = control.ROOT / 'runs' / 'test-private-site-input.json'
         try:
             result = control.site_input(jid, output)
@@ -190,6 +190,41 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn(additional, record['enabled_services'])
             self.assertEqual(record['phone'], '+5514999999999')
             self.assertTrue(record['preview'])
+        finally:
+            output.unlink(missing_ok=True)
+
+    def test_unconfirmed_defaults_remain_enabled_and_unsupported_additions_are_removed(self):
+        jid = self.add()
+        self.qualified(jid)
+        from tools.quick_site import profile
+        defaults = profile('electrician')['segment']['default_services']
+        additional = next(x for x in profile('electrician')['catalog'] if x not in defaults)
+        with self.assertRaisesRegex(ValueError, 'observed evidence'):
+            control.update(jid, 'codex', fields={'services': {'confirmed': [additional]}})
+        control.update(jid, 'codex', fields={'services': {'confirmed': [], 'excluded': [], 'evidence': {}}})
+        output = control.ROOT / 'runs' / 'test-default-site-input.json'
+        try:
+            control.site_input(jid, output)
+            self.assertEqual(json.loads(output.read_text())[0]['enabled_services'], defaults)
+            self.assertNotIn(additional, json.loads(output.read_text())[0]['enabled_services'])
+        finally:
+            output.unlink(missing_ok=True)
+
+    def test_default_exclusion_requires_documented_contradiction(self):
+        jid = self.add()
+        self.qualified(jid)
+        from tools.quick_site import profile
+        default = profile('electrician')['segment']['default_services'][0]
+        source = 'https://ficticia.example/services'
+        with self.assertRaisesRegex(ValueError, 'explicit documented contradiction'):
+            control.update(jid, 'codex', fields={'services': {'excluded': [default],
+                'evidence': {default: {'source': source, 'observation': 'No mention of this service'}}}})
+        control.update(jid, 'codex', fields={'services': {'excluded': [default],
+            'evidence': {default: {'source': source, 'observation': 'Business explicitly says this service is unavailable', 'contradiction': True}}}})
+        output = control.ROOT / 'runs' / 'test-contradiction-site-input.json'
+        try:
+            control.site_input(jid, output)
+            self.assertNotIn(default, json.loads(output.read_text())[0]['enabled_services'])
         finally:
             output.unlink(missing_ok=True)
 
