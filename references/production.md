@@ -1,8 +1,10 @@
 # Produção rápida com template preparado
 
+Para lotes atuais, siga [o procedimento oficial](../docs/workflows/PROSPECCAO.md) e [o piloto de prévias](../docs/PILOTO-PREVIAS.md). O projeto Vercel é `scarasoft-previas`.
+
 ## Gerar a prévia
 
-Use `python3 tools/quick_site.py templates` para listar modelos. O único modelo atual é `electrician`, adequado somente a eletricistas. Preserve layout, imagens ilustrativas e rotas. Por empresa, personalize nome, telefone, e-mail, rua, cidade, UF, CEP, cor da marca e serviços verificados; opcionalmente CNPJ, horário, área atendida, formas de pagamento, Instagram, ano de fundação, nota/avaliações do Google e depoimentos — **somente com fonte pública verificada** (nota e depoimentos exigem URL `https`). Não invente preços, horários, certificações, avaliações, equipe ou projetos.
+Use `python3 tools/quick_site.py templates` para listar modelos. Os modelos disponíveis são listados por `python3 tools/quick_site.py templates`. Preserve layout, imagens ilustrativas e rotas. Por empresa, personalize nome, telefone, e-mail, rua, cidade, UF, CEP, cor da marca e serviços verificados; opcionalmente CNPJ, horário, área atendida, formas de pagamento, Instagram, ano de fundação, nota/avaliações do Google e depoimentos — **somente com fonte pública verificada** (nota e depoimentos exigem URL `https`). Não invente preços, horários, certificações, avaliações, equipe ou projetos.
 
 ```sh
 ./website --template electrician --name 'Elétrica Exemplo' --theme-color '#2563eb' --phone '+55 11 99999-9999' --email 'contato@exemplo.com.br' --street 'Rua Exemplo, 10' --city 'São Paulo' --state SP --zip '01000-000' --enabled-service electrical-installation
@@ -25,10 +27,4 @@ O comando instala dependências se necessário, roda lint e `vite build`, depois
 
 ## Vercel
 
-Lucas optou por operar localmente e autorizou remover o projeto fictício `revamp-br-mvp-demo-20261010`. Ele foi removido; nenhuma nova publicação faz parte da operação local. A geração e o dashboard continuam funcionando na máquina, mas uma URL `127.0.0.1` não pode ser enviada a uma empresa como prévia pública. Antes de contato real que contenha link, definir e autorizar a forma de publicação e verificar a URL acessível sem sessão.
-
-O escopo de `settings.json` foi identificado por `whoami` e `teams ls` na conta Lucas; reconfirme-o antes de publicar com a CLI indicada (`pnpm dlx vercel@59.16.0`). Não use o escopo do autor original. Crie um projeto novo `revamp-JOB_ID` para a pasta `site/`, sem copiar `.vercel` nem variáveis de outro projeto. Confira o conteúdo de `.vercel/project.json` antes do deploy.
-
-**Atenção ao primeiro deploy:** na CLI 59.16.0, o primeiro `vercel deploy` do projeto de demonstração retornou `target: production` e criou alias de produção, mesmo sem `--prod`. Portanto, antes de criar outro projeto ou fazer seu primeiro deploy, confirme a autorização explícita para essa mudança ou um procedimento de prévia comprovado pela CLI. Não presuma que omitir `--prod` basta. A conta também redirecionou a URL a login Vercel para visitante sem sessão; ela não é uma prévia pública utilizável. Não desative a proteção sem autorização. Verifique a URL sem login, página inicial, rota de serviço, imagens, CTA e os cabeçalhos `noindex` antes de usá-la em contato comercial. Não altere domínios ou projetos existentes.
-
-Depois, siga [contato](outreach.md) ou [fallback manual](manual-outreach.md). Sem autorização específica do lote, prepare apenas a simulação, sem submit. Uma pasta local ou resposta de CLI não equivale a publicação verificada.
+Siga [PILOTO-PREVIAS](../docs/PILOTO-PREVIAS.md): publique somente a pasta `site/` no projeto existente `scarasoft-previas`, verifique a URL sem login e registre o deployment no ledger. O lote termina sem contato comercial.

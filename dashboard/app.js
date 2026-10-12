@@ -1,9 +1,10 @@
 'use strict';
 const $ = (selector) => document.querySelector(selector);
-const state = { batches: [], jobs: [], events: [], workers: [], settings: { batch_size: 3, max_workers: 3 } };
+const state = { batches: [], jobs: [], events: [], workers: [], templates: [], settings: { batch_size: 3, max_workers: 3 } };
 let batchFilter = 'all', stageFilter = 'all', selectedJob = null, previousSignature = '', connected = false;
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const STAGES = { queued: 'Na fila', reviewing: 'Em análise', extracting: 'Coletando dados', building: 'Gerando', checking: 'Verificando', deploying: 'Publicando', ready: 'Prévia pronta', contacting: 'Tentativa de contato', complete: 'Contato efetuado', sent: 'Enviado', uncertain: 'Resultado incerto', blocked: 'Bloqueado', skipped: 'Ignorado', manual: 'Contato manual', simulated: 'Simulado', not_sent: 'Não enviado', attempting: 'Tentativa reservada', submitted: 'Enviado', manual_required: 'Contato manual necessário' };
+const production = (job) => job.data?.preview_verified === true && safeURL(job.preview_url) ? 'Prévia verificada' : label(job.stage);
 const label = (value) => STAGES[value] || String(value || 'queued').replace(/[_-]/g, ' ');
 const time = (value) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Time unavailable' : date.toLocaleString('pt-BR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); };
 function safeURL(value) { try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) ? url.href : null; } catch { return null; } }
@@ -42,18 +43,19 @@ function render() {
   const batches = state.batches;
   if (batchFilter !== 'all' && !batches.some(batch => String(batch.id) === batchFilter)) batchFilter = 'all';
   const select = $('#batch-filter');
-  select.innerHTML = '<option value="all">Todos os lotes</option>' + batches.map(batch => `<option value="${escapeHTML(batch.id)}">${escapeHTML(batch.industry)} · ${escapeHTML(batch.city)} · ${escapeHTML(batch.completed_count || 0)}/${escapeHTML(batch.requested_count || 3)} contatos</option>`).join('');
+  select.innerHTML = '<option value="all">Todos os lotes</option>' + batches.map(batch => `<option value="${escapeHTML(batch.id)}">${escapeHTML(batch.industry)} · ${escapeHTML(batch.city)} · ${escapeHTML(batch.published_count || 0)}/${escapeHTML(batch.requested_count || 3)} prévias</option>`).join('');
   select.value = batchFilter;
   const allJobs = state.jobs.filter(job => batchFilter === 'all' || String(job.batch_id) === batchFilter);
   const jobs = allJobs.filter(job => stageFilter === 'all' || category(job) === stageFilter);
-  $('#edition-count').textContent = String(state.jobs.filter(job => ['complete', 'sent'].includes(job.stage)).length).padStart(2, '0');
+  $('#edition-count').textContent = String(state.jobs.filter(job => job.data?.preview_verified === true && safeURL(job.preview_url)).length).padStart(2, '0');
   $('#sheet-count').textContent = jobs.length;
   $('#manual-count').textContent = allJobs.filter(isManual).length;
   const maxWorkers = Math.max(1, Number(state.settings.max_workers) || 3);
   const selectedBatch = batches.find(batch => String(batch.id) === batchFilter);
   const target = selectedBatch ? Number(selectedBatch.requested_count) || 3 : batches.reduce((sum, batch) => sum + (Number(batch.requested_count) || 3), 0);
-  const completed = allJobs.filter(job => ['complete', 'sent'].includes(job.stage)).length;
-  $('#capacity-note').textContent = `${completed}/${target} contatos · ${maxWorkers} em paralelo`;
+  const completed = allJobs.filter(job => job.data?.preview_verified === true && safeURL(job.preview_url)).length;
+  $('#capacity-note').textContent = `${completed}/${target} prévias · ${maxWorkers} em paralelo`;
+  $('#funnel').textContent = `Descobertos ${allJobs.length} · Verificados ${allJobs.filter(job => job.data?.presence_status).length} · Qualificados ${allJobs.filter(job => ['A_prioritaria','B_promissora','C_potencial'].includes(job.data?.commercial_category)).length} · Publicados ${completed} · Pendências ${allJobs.filter(job => ['blocked','skipped'].includes(job.stage) || ['D_pendente','descartada'].includes(job.data?.commercial_category)).length}`;
   const activeWorkers = state.workers.filter(worker => worker.job_id && !['idle', 'complete', 'completed', 'stopped'].includes(worker.status));
   const assigned = new Set();
   $('#workers').innerHTML = Array.from({ length: maxWorkers }, (_, index) => {
@@ -76,7 +78,7 @@ function render() {
   } else {
     $('#jobs').innerHTML = jobs.map((job, index) => {
       const initials = String(job.name || '?').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
-      return `<button class="job-card${isManual(job) ? ' manual-card' : ''}" data-job="${escapeHTML(job.id)}" aria-label="Abrir detalhes de ${escapeHTML(job.name || 'empresa')}"><div class="job-cover"><span class="job-number">${String(index + 1).padStart(2, '0')}</span><span class="cover-monogram" aria-hidden="true">${escapeHTML(initials)}</span><span class="cover-caption">${isManual(job) ? 'Contato manual necessário' : job.preview_url ? 'Prévia ↗' : ''}</span></div><div class="job-info"><h3>${escapeHTML(job.name || 'Empresa sem nome')}</h3><div class="job-domain">${escapeHTML(job.domain || job.url || 'Site pendente')}</div><p class="job-detail">${escapeHTML(job.detail || job.reason || 'Na fila')}</p><div class="job-bottom"><span class="stage ${category(job)}">${escapeHTML(stageLabel(job))}</span><span class="job-arrow" aria-hidden="true">↗</span></div></div></button>`;
+      return `<button class="job-card${isManual(job) ? ' manual-card' : ''}" data-job="${escapeHTML(job.id)}" aria-label="Abrir detalhes de ${escapeHTML(job.name || 'empresa')}"><div class="job-cover"><span class="job-number">${String(index + 1).padStart(2, '0')}</span><span class="cover-monogram" aria-hidden="true">${escapeHTML(initials)}</span><span class="cover-caption">${isManual(job) ? 'Contato manual necessário' : job.preview_url ? 'Prévia ↗' : ''}</span></div><div class="job-info"><h3>${escapeHTML(job.name || 'Empresa sem nome')}</h3><div class="job-domain">${escapeHTML(job.domain || 'Sem site próprio registrado')}</div><p class="job-detail">${escapeHTML(job.data?.commercial_category || 'Sem categoria')} · ${escapeHTML(job.data?.opportunity_type || 'Tipo pendente')}</p><p class="job-detail">${escapeHTML(job.detail || job.reason || 'Na fila')}</p><div class="job-bottom"><span class="stage ${category(job)}">${escapeHTML(production(job))}</span><span class="job-arrow" aria-hidden="true">↗</span></div></div></button>`;
     }).join('');
   }
   if (selectedJob && $('#job-dialog').open) renderDialog();
@@ -101,15 +103,18 @@ function renderDialog() {
   if (!job) return;
   const original = safeURL(job.url), preview = safeURL(job.preview_url);
   const events = state.events.filter(event => String(event.job_id) === String(job.id)).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  $('#dialog-content').innerHTML = `<h2 id="dialog-title">${escapeHTML(job.name)}</h2><span class="stage ${category(job)}">${escapeHTML(stageLabel(job))}</span><div class="dialog-links">${original ? `<a href="${escapeHTML(original)}" target="_blank" rel="noopener noreferrer">Original ↗</a>` : ''}${preview ? `<a class="preview" href="${escapeHTML(preview)}" target="_blank" rel="noopener noreferrer">Prévia ↗</a>` : ''}</div>${manualOutreach(job)}${contactSimulation(job)}<section class="dialog-section"><div class="meta-label">Andamento</div><p>${escapeHTML(job.detail || 'Aguardando atualização do coordenador.')}</p><div class="meta-label">Trabalhador · atualização</div><p>${escapeHTML(job.worker || 'Não atribuído')} / ${escapeHTML(time(job.updated_at))}</p></section>${job.reason ? `<section class="dialog-section"><div class="meta-label">Motivo</div><p>${escapeHTML(job.reason)}</p></section>` : ''}<section class="dialog-section"><div class="meta-label">Contato</div><p>${escapeHTML(label(job.contact_status || 'não enviado'))}</p></section><section class="dialog-section"><div class="meta-label">Atividade</div>${events.length ? `<ol class="timeline">${events.map(event => `<li>${escapeHTML(event.message)}<time class="timeline-time">${escapeHTML(time(event.created_at))}</time></li>`).join('')}</ol>` : '<p>Nenhuma atividade registrada.</p>'}</section>`;
+  $('#dialog-content').innerHTML = `<h2 id="dialog-title">${escapeHTML(job.name)}</h2><span class="stage ${category(job)}">${escapeHTML(stageLabel(job))}</span><div class="dialog-links">${original ? `<a href="${escapeHTML(original)}" target="_blank" rel="noopener noreferrer">Original ↗</a>` : ''}${preview ? `<a class="preview" href="${escapeHTML(preview)}" target="_blank" rel="noopener noreferrer">Prévia ↗</a>` : ''}</div><section class="dialog-section"><div class="meta-label">Oportunidade</div><p>${escapeHTML(job.data?.commercial_category || 'Pendente')} · ${escapeHTML(job.data?.opportunity_type || 'Não definido')}</p><p>${escapeHTML(job.data?.commercial_reason || '')}</p><div class="meta-label">Produção</div><p>${escapeHTML(production(job))} · ${escapeHTML(job.data?.presence_status || 'Presença não verificada')}</p><div class="meta-label">Contatos e fontes</div><pre>${escapeHTML(JSON.stringify(job.data?.contacts || {}, null, 2))}</pre></section>${manualOutreach(job)}${contactSimulation(job)}<section class="dialog-section"><div class="meta-label">Andamento</div><p>${escapeHTML(job.detail || 'Aguardando atualização do coordenador.')}</p><div class="meta-label">Trabalhador · atualização</div><p>${escapeHTML(job.worker || 'Não atribuído')} / ${escapeHTML(time(job.updated_at))}</p></section>${job.reason ? `<section class="dialog-section"><div class="meta-label">Motivo</div><p>${escapeHTML(job.reason)}</p></section>` : ''}<section class="dialog-section"><div class="meta-label">Contato</div><p>${escapeHTML(label(job.contact_status || 'não enviado'))}</p></section><section class="dialog-section"><div class="meta-label">Atividade</div>${events.length ? `<ol class="timeline">${events.map(event => `<li>${escapeHTML(event.message)}<time class="timeline-time">${escapeHTML(time(event.created_at))}</time></li>`).join('')}</ol>` : '<p>Nenhuma atividade registrada.</p>'}</section>`;
 }
 async function poll() {
   try {
     const response = await fetch('/api/state', { cache: 'no-store' });
     if (!response.ok) throw new Error(`Server returned ${response.status}`);
     const data = await response.json();
-    for (const key of ['batches', 'jobs', 'events', 'workers']) state[key] = Array.isArray(data[key]) ? data[key] : [];
+    for (const key of ['batches', 'jobs', 'events', 'workers', 'templates']) state[key] = Array.isArray(data[key]) ? data[key] : [];
     state.settings = data.settings || state.settings;
+    const choices = '<option value="">Selecione o segmento</option><option value="all">Todos os segmentos</option>' + state.templates.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join('');
+    const segmentSelect = $('#batch-form').elements.industry;
+    if (segmentSelect.dataset.choices !== choices) { const value = segmentSelect.value; segmentSelect.innerHTML = choices; segmentSelect.value = value; segmentSelect.dataset.choices = choices; }
     const signature = JSON.stringify(state);
     connected = true;
     $('#connection').className = 'connection online';
@@ -133,7 +138,7 @@ $('#batch-form').addEventListener('submit', async (event) => {
     const response = await fetch('/api/batches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ industry, city, requested_count: requestedCount }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Não foi possível enfileirar o lote.');
-    $('#form-message').textContent = `Lote de ${requestedCount} contatos para ${industry} em ${city} enfileirado. Peça ao Codex para executar.`;
+    $('#form-message').textContent = `Lote de ${requestedCount} prévias para ${industry} em ${city} enfileirado. Peça ao Codex para executar.`;
     form.reset();
     form.elements.requested_count.value = '3';
     previousSignature = '';
