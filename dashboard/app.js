@@ -18,6 +18,62 @@ function contactLink(value, kind) {
   const href = kind === 'email' ? `mailto:${encodeURIComponent(text)}` : `tel:${text.replace(/[^+0-9]/g, '')}`;
   return `<a href="${escapeHTML(href)}">${escapeHTML(text)}</a>`;
 }
+const contactRecord = (value, legacyKey = 'value') => value && typeof value === 'object' && !Array.isArray(value) ? value : typeof value === 'string' ? { [legacyKey]: value } : {};
+function phoneNumber(value) {
+  if (typeof value !== 'string' || !/^\+?[0-9 () .-]+$/.test(value.trim())) return null;
+  const raw = value.trim(), digits = raw.replace(/\D/g, '');
+  if (!/^\d{10,15}$/.test(digits) || raw.indexOf('+') > 0) return null;
+  const local = digits.startsWith('55') && [12, 13].includes(digits.length) ? digits.slice(2) : digits;
+  const display = /^[1-9]\d{9,10}$/.test(local) && [10, 11].includes(local.length)
+    ? `(${local.slice(0, 2)}) ${local.slice(2, -4)}-${local.slice(-4)}` : raw;
+  return { digits, dial: `${raw.startsWith('+') ? '+' : ''}${digits}`, display: digits.startsWith('55') && [12, 13].includes(digits.length) ? `+55 ${display}` : display };
+}
+function whatsappNumber(value) {
+  const phone = phoneNumber(value);
+  if (!phone) return null;
+  const digits = phone.digits.replace(/^0(?=\d{10,11}$)/, '');
+  const full = digits.startsWith('55') && [12, 13].includes(digits.length) ? digits : [10, 11].includes(digits.length) ? `55${digits}` : null;
+  return full && /^55[1-9]\d{9,10}$/.test(full) ? full : null;
+}
+function checkedDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value)) return '';
+  const date = new Date(value.length === 10 ? `${value}T00:00:00Z` : value);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value.slice(0, 10)
+    ? '' : new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(date);
+}
+function sourceEvidence(record) {
+  const sources = Array.isArray(record.sources) ? record.sources : [record.source];
+  const links = sources.map(safeURL).filter(Boolean).map(url => {
+    const domain = new URL(url).hostname.replace(/^www\./, '');
+    return `<a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" title="${escapeHTML(url)}">${escapeHTML(domain)} ↗</a>`;
+  });
+  const date = checkedDate(record.checked_at);
+  return `<div class="contact-evidence"><span>${links.length ? links.join(' · ') : 'Fonte não registrada'}</span>${date ? `<time datetime="${escapeHTML(record.checked_at.slice(0, 10))}">Verificado em ${date}</time>` : ''}</div>`;
+}
+function renderContacts(value) {
+  const contacts = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const phone = contactRecord(contacts.phone), phoneValid = phoneNumber(phone.value);
+  const whatsapp = contactRecord(contacts.whatsapp), whatsappStatus = whatsapp.status || (contacts.whatsapp === false ? 'nao_utiliza' : typeof contacts.whatsapp === 'string' ? 'confirmado' : '');
+  const whatsappValue = typeof contacts.whatsapp === 'string' ? contacts.whatsapp : whatsapp.value;
+  const whatsappDigits = whatsappStatus === 'confirmado' ? whatsappNumber(whatsappValue) : whatsappStatus === 'presumido' ? whatsappNumber(phone.value) : null;
+  const whatsappDisplay = whatsappDigits ? phoneNumber(whatsappStatus === 'confirmado' ? whatsappValue : phone.value).display : '';
+  const email = contactRecord(contacts.email), emailStatus = email.status || (typeof contacts.email === 'string' ? 'encontrado' : '');
+  const emailValue = typeof email.value === 'string' ? email.value.trim() : '';
+  const emailValid = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(emailValue);
+  const form = contactRecord(contacts.form, 'url'), formStatus = form.status || (typeof contacts.form === 'string' ? 'encontrado' : '');
+  const formURL = safeURL(form.url);
+  const item = (title, content, evidence) => `<div class="contact-item"><div class="contact-label">${title}</div><div class="contact-main">${content}</div>${evidence}</div>`;
+  const phoneContent = phone.value === undefined ? 'Não registrado' : phoneValid
+    ? `<a href="${escapeHTML(`tel:${phoneValid.dial}`)}">${escapeHTML(phoneValid.display)}</a><button type="button" class="copy-phone" data-copy-phone="${escapeHTML(phoneValid.dial)}" aria-label="Copiar telefone ${escapeHTML(phoneValid.display)}">Copiar</button><span class="copy-phone-status" role="status" aria-live="polite"></span>` : 'Número inválido';
+  const whatsappText = { confirmado: 'Confirmado', presumido: 'Presumido · telefone público', nao_utiliza: 'Não utiliza WhatsApp', nao_verificado: 'Não verificado' }[whatsappStatus] || 'Não registrado';
+  const whatsappContent = `${escapeHTML(whatsappText)}${whatsappDigits ? ` · ${escapeHTML(whatsappDisplay)} · <a href="https://wa.me/${whatsappDigits}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp ↗</a>` : ''}${['confirmado', 'presumido'].includes(whatsappStatus) && !whatsappDigits ? ' · Número indisponível' : ''}`;
+  const emailContent = emailStatus === 'encontrado' ? emailValid ? `<a href="mailto:${escapeHTML(encodeURIComponent(emailValue))}">${escapeHTML(emailValue)}</a>` : 'Endereço inválido'
+    : emailStatus === 'nao_encontrado' ? 'Não encontrado' : emailStatus === 'nao_verificado' ? 'Não verificado' : 'Não registrado';
+  const formContent = formStatus === 'encontrado'
+    ? `<span>Formulário existente</span>${formURL ? ` · <a href="${escapeHTML(formURL)}" target="_blank" rel="noopener noreferrer" title="${escapeHTML(formURL)}">${escapeHTML(new URL(formURL).hostname.replace(/^www\./, '') + new URL(formURL).pathname)} ↗</a>` : ' · URL inválida'}<div class="contact-detail">${form.eligible === true ? 'Apropriado para contato comercial' : form.eligible === false ? 'Não apropriado para contato comercial' : 'Elegibilidade comercial não registrada'}${typeof form.purpose === 'string' && form.purpose.trim() ? ` · Finalidade: ${escapeHTML(form.purpose.trim())}` : ''}${Array.isArray(form.restrictions) && form.restrictions.length ? ` · Restrições: ${escapeHTML(form.restrictions.filter(v => typeof v === 'string' && v.trim()).join(', '))}` : ''}</div>`
+    : formStatus === 'nao_encontrado' ? 'Não encontrado' : formStatus === 'nao_verificado' ? 'Não verificado' : 'Não registrado';
+  return `<section class="dialog-section contacts-section" aria-label="Contatos e fontes"><div class="meta-label">Contatos e fontes</div><div class="contact-grid">${item('Telefone', phoneContent, sourceEvidence(phone))}${item('WhatsApp', whatsappContent, sourceEvidence(whatsappStatus === 'presumido' ? phone : whatsapp))}${item('E-mail', emailContent, sourceEvidence(email))}${item('Formulário', formContent, sourceEvidence(form))}</div></section>`;
+}
 function manualOutreach(job) {
   if (!isManual(job)) return '';
   const data = job.data?.manual_outreach || {};
@@ -103,7 +159,7 @@ function renderDialog() {
   if (!job) return;
   const original = safeURL(job.url), preview = safeURL(job.preview_url);
   const events = state.events.filter(event => String(event.job_id) === String(job.id)).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  $('#dialog-content').innerHTML = `<h2 id="dialog-title">${escapeHTML(job.name)}</h2><span class="stage ${category(job)}">${escapeHTML(stageLabel(job))}</span><div class="dialog-links">${original ? `<a href="${escapeHTML(original)}" target="_blank" rel="noopener noreferrer">Original ↗</a>` : ''}${preview ? `<a class="preview" href="${escapeHTML(preview)}" target="_blank" rel="noopener noreferrer">Prévia ↗</a>` : ''}</div><section class="dialog-section"><div class="meta-label">Oportunidade</div><p>${escapeHTML(job.data?.commercial_category || 'Pendente')} · ${escapeHTML(job.data?.opportunity_type || 'Não definido')}</p><p>${escapeHTML(job.data?.commercial_reason || '')}</p><div class="meta-label">Produção</div><p>${escapeHTML(production(job))} · ${escapeHTML(job.data?.presence_status || 'Presença não verificada')}</p><div class="meta-label">Contatos e fontes</div><pre>${escapeHTML(JSON.stringify(job.data?.contacts || {}, null, 2))}</pre></section>${manualOutreach(job)}${contactSimulation(job)}<section class="dialog-section"><div class="meta-label">Andamento</div><p>${escapeHTML(job.detail || 'Aguardando atualização do coordenador.')}</p><div class="meta-label">Trabalhador · atualização</div><p>${escapeHTML(job.worker || 'Não atribuído')} / ${escapeHTML(time(job.updated_at))}</p></section>${job.reason ? `<section class="dialog-section"><div class="meta-label">Motivo</div><p>${escapeHTML(job.reason)}</p></section>` : ''}<section class="dialog-section"><div class="meta-label">Contato</div><p>${escapeHTML(label(job.contact_status || 'não enviado'))}</p></section><section class="dialog-section"><div class="meta-label">Atividade</div>${events.length ? `<ol class="timeline">${events.map(event => `<li>${escapeHTML(event.message)}<time class="timeline-time">${escapeHTML(time(event.created_at))}</time></li>`).join('')}</ol>` : '<p>Nenhuma atividade registrada.</p>'}</section>`;
+  $('#dialog-content').innerHTML = `<h2 id="dialog-title">${escapeHTML(job.name)}</h2><span class="stage ${category(job)}">${escapeHTML(stageLabel(job))}</span><div class="dialog-links">${original ? `<a href="${escapeHTML(original)}" target="_blank" rel="noopener noreferrer">Original ↗</a>` : ''}${preview ? `<a class="preview" href="${escapeHTML(preview)}" target="_blank" rel="noopener noreferrer">Prévia ↗</a>` : ''}</div><section class="dialog-section"><div class="meta-label">Oportunidade</div><p>${escapeHTML(job.data?.commercial_category || 'Pendente')} · ${escapeHTML(job.data?.opportunity_type || 'Não definido')}</p><p>${escapeHTML(job.data?.commercial_reason || '')}</p><div class="meta-label">Produção</div><p>${escapeHTML(production(job))} · ${escapeHTML(job.data?.presence_status || 'Presença não verificada')}</p></section>${renderContacts(job.data?.contacts)}${manualOutreach(job)}${contactSimulation(job)}<section class="dialog-section"><div class="meta-label">Andamento</div><p>${escapeHTML(job.detail || 'Aguardando atualização do coordenador.')}</p><div class="meta-label">Trabalhador · atualização</div><p>${escapeHTML(job.worker || 'Não atribuído')} / ${escapeHTML(time(job.updated_at))}</p></section>${job.reason ? `<section class="dialog-section"><div class="meta-label">Motivo</div><p>${escapeHTML(job.reason)}</p></section>` : ''}<section class="dialog-section"><div class="meta-label">Contato</div><p>${escapeHTML(label(job.contact_status || 'não enviado'))}</p></section><section class="dialog-section"><div class="meta-label">Atividade</div>${events.length ? `<ol class="timeline">${events.map(event => `<li>${escapeHTML(event.message)}<time class="timeline-time">${escapeHTML(time(event.created_at))}</time></li>`).join('')}</ol>` : '<p>Nenhuma atividade registrada.</p>'}</section>`;
 }
 async function poll() {
   try {
@@ -159,6 +215,15 @@ $('#jobs').addEventListener('click', event => {
   selectedJob = card.dataset.job; renderDialog(); $('#job-dialog').showModal();
 });
 $('#dialog-content').addEventListener('click', async event => {
+  const copyPhone = event.target.closest('.copy-phone');
+  if (copyPhone) {
+    const status = copyPhone.nextElementSibling;
+    try {
+      await navigator.clipboard.writeText(copyPhone.dataset.copyPhone);
+      status.textContent = 'Copiado.';
+    } catch { status.textContent = 'Não foi possível copiar.'; }
+    return;
+  }
   const button = event.target.closest('#copy-message');
   if (!button) return;
   const message = $('#manual-message'), status = $('#copy-status');
