@@ -1,5 +1,6 @@
 """Deterministic, offline commercial copy and channel selection."""
 import re
+import datetime as dt
 from urllib.parse import quote, urlsplit
 
 SEARCHES = {
@@ -15,18 +16,18 @@ ALLOWED = {'empresa','cidade','segmento','busca_exemplo','preview_url','observac
 COPY = {
     'primeiro_site': {
         'subject': 'Uma proposta visual para {empresa}',
-        'short': "Olá! Sou Lucas, da scarasoft. Quem procura {segmento} pode pesquisar por '{busca_exemplo}'. Um site profissional ajuda a apresentar seus serviços e facilita o contato. Preparamos uma demonstração independente para {empresa}: {preview_url}\nÉ uma proposta visual não oficial e sem compromisso. O que achou?",
-        'full': "Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Quando alguém precisa de {segmento}, pode começar pesquisando por '{busca_exemplo}'. Esse é apenas um exemplo ilustrativo de busca.\n\nTer um site profissional pode ajudar {empresa} a apresentar seus serviços, transmitir confiança na primeira impressão e facilitar o contato.\n\nPreparamos uma demonstração independente de como poderia ficar um site para a empresa:\n{preview_url}\n\nÉ uma proposta visual não oficial e sem compromisso. Gostaria de saber o que achou!\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}",
+        'short': "Olá! Sou Lucas, da scarasoft. Quem procura {segmento} pode buscar, por exemplo, '{busca_exemplo}'. Um site profissional ajuda a conhecer os serviços da {empresa}, transmite confiança e facilita o contato. Veja a prévia demonstrativa: {preview_url}\nÉ independente, não oficial e sem compromisso. O que achou?",
+        'full': "Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Quem precisa de {segmento} pode pesquisar, por exemplo, '{busca_exemplo}'. Um site profissional ajuda a conhecer os serviços da {empresa}, transmite confiança na primeira impressão e facilita o contato.\n\nPreparamos esta prévia demonstrativa:\n{preview_url}\n\nEla é independente, não oficial e sem compromisso. Gostaria de saber o que achou!\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}",
     },
     'redesign': {
         'subject': 'Proposta visual para {empresa}',
-        'short': 'Olá! Sou Lucas, da scarasoft. Conheci a {empresa} e preparei uma demonstração independente de uma apresentação digital renovada: {preview_url}\nÉ uma proposta visual não oficial, sem compromisso e sem alteração do site atual. O que achou?',
-        'full': 'Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Conheci a {empresa} e seu site e preparei uma proposta visual de apresentação digital renovada.\n\nMuitos clientes pesquisam e comparam empresas pela internet antes de entrar em contato. Um site agradável e fácil de navegar pode fazer diferença nessa primeira impressão.\n\nPreparei uma demonstração independente para vocês:\n{preview_url}\n\nÉ uma proposta visual não oficial, sem compromisso e sem alteração do site atual. O que achou?\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}',
+        'short': "Olá! Sou Lucas, da scarasoft. Quem busca, por exemplo, '{busca_exemplo}' pode conhecer a {empresa} pelo site. Uma apresentação profissional ajuda a descobrir os serviços, transmite confiança e facilita o contato. Preparei uma prévia renovada: {preview_url}\nÉ demonstrativa, independente e não oficial; não altera o site atual. O que achou?",
+        'full': "Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Conheci a {empresa} e seu site. Quem busca, por exemplo, '{busca_exemplo}' pode conhecer os serviços pela internet antes de entrar em contato. Uma apresentação profissional e fácil de navegar ajuda a transmitir confiança nessa primeira impressão.\n\nPreparei uma prévia renovada:\n{preview_url}\n\nÉ demonstrativa, independente, não oficial e sem compromisso; não altera o site atual. O que achou?\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}",
     },
     'site_inoperante': {
         'subject': 'Uma demonstração de site para {empresa}',
-        'short': 'Olá! Sou Lucas, da scarasoft. Ao pesquisar a {empresa}, tentei acessar o site informado e encontrei uma dificuldade de acesso: {observacao_verificada}. Preparei uma demonstração independente: {preview_url}\nÉ uma proposta visual não oficial e sem compromisso. O que achou?',
-        'full': 'Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Ao pesquisar a {empresa}, tentei acessar o site informado e encontrei uma dificuldade de acesso: {observacao_verificada}.\n\nQuando alguém procura um serviço pela internet, não conseguir abrir o site pode levar essa pessoa a buscar outra opção. Por isso, preparei uma demonstração independente de um novo site para apresentar os serviços e facilitar o contato:\n{preview_url}\n\nÉ uma proposta visual não oficial e sem compromisso. Gostaria de mostrar essa possibilidade para vocês.\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}',
+        'short': 'Olá! Sou Lucas, da scarasoft. Ao pesquisar a {empresa}, encontrei esta dificuldade ao acessar o site informado: {observacao_verificada}. Uma apresentação profissional ajuda a mostrar os serviços, transmitir confiança e facilitar o contato. Preparei uma prévia: {preview_url}\nÉ demonstrativa, independente, não oficial e sem compromisso. O que achou?',
+        'full': 'Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Ao pesquisar a {empresa}, tentei acessar o site informado e encontrei esta dificuldade: {observacao_verificada}.\n\nQuando alguém procura um serviço pela internet, não conseguir abrir o site pode levar essa pessoa a buscar outra opção. Uma apresentação profissional ajuda a mostrar os serviços, transmitir confiança e facilitar o contato.\n\nPreparei esta prévia demonstrativa:\n{preview_url}\n\nEla é independente, não oficial e sem compromisso. Gostaria de saber o que achou.\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}',
     },
 }
 
@@ -47,15 +48,29 @@ def route(contacts, exclude=()):
     if not isinstance(email, dict): email = {}
     if 'email' not in exclude and email.get('status') == 'encontrado' and re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', str(email.get('value',''))):
         return 'email', email['value']
+    if contacts.get('whatsapp') is False: return 'no_channel', ''
     whatsapp = contacts.get('whatsapp') or {}
     if not isinstance(whatsapp, dict): whatsapp = {}
     if 'whatsapp_manual' not in exclude and whatsapp.get('status') != 'nao_utiliza':
         phone = contacts.get('phone') or {}
         if not isinstance(phone, dict): phone = {}
-        number = whatsapp.get('value') if whatsapp.get('status') == 'confirmado' else phone.get('value')
-        if isinstance(number, str) and re.fullmatch(r'\+[1-9][0-9]{7,14}', number):
+        source = whatsapp if whatsapp.get('status') == 'confirmado' else phone
+        number = source.get('value')
+        if isinstance(number, str) and re.fullmatch(r'\+[1-9][0-9]{7,14}', number) and reliable_source(source):
             return 'whatsapp_manual', number
     return 'no_channel', ''
+
+def reliable_source(record):
+    """A public number needs a traceable source and a real verification date."""
+    try:
+        url = urlsplit(record.get('source', ''))
+        checked = dt.date.fromisoformat(record.get('checked_at', ''))
+        host = (url.hostname or '').lower().rstrip('.')
+        return (url.scheme in ('http', 'https') and '.' in host
+                and host != 'localhost' and not host.endswith(('.local','.localhost'))
+                and not url.username and not url.password and checked <= dt.date.today())
+    except (TypeError, ValueError):
+        return False
 
 def render(template, variant, values):
     if template not in COPY or variant not in ('short','full','subject'):

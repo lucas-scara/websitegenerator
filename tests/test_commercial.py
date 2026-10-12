@@ -50,6 +50,10 @@ class CommercialTests(unittest.TestCase):
                 rendered = commercial.render(template,variant,values)
                 self.assertIn('Empresa Exemplo',rendered)
                 self.assertNotRegex(rendered,r'\{[^{}]+\}')
+            short = commercial.render(template,'short',values)
+            for word in ('serviços','confiança','contato','não oficial'):
+                self.assertIn(word,short)
+        self.assertIn('chaveiro perto de mim',commercial.render('redesign','short',values))
         for segment, (_, query) in commercial.SEARCHES.items():
             self.assertTrue(query.replace('{cidade}','Bauru'))
         with self.assertRaisesRegex(ValueError,'Missing'):
@@ -58,10 +62,10 @@ class CommercialTests(unittest.TestCase):
     def test_routing_and_fallback(self):
         contacts = {'form':{'status':'encontrado','eligible':False,'purpose':'orçamento','url':'https://example.org/form'},
                     'email':{'status':'encontrado','value':'public@example.org'},
-                    'phone':{'value':'+5514999999999'}}
+                    'phone':{'value':'+5514999999999','source':'https://example.org/ficha','checked_at':control.now()[:10]}}
         self.assertEqual(commercial.route(contacts)[0],'email')
         self.assertEqual(commercial.route({**contacts,'email':{'status':'nao_encontrado'}})[0],'whatsapp_manual')
-        self.assertEqual(commercial.route({'phone':{'value':'+5514999999999'},'whatsapp':{'status':'presumido'}})[0],'whatsapp_manual')
+        self.assertEqual(commercial.route({'phone':contacts['phone'],'whatsapp':{'status':'presumido'}})[0],'whatsapp_manual')
         self.assertEqual(commercial.route({})[0],'no_channel')
         contacts['form'].update(eligible=True,purpose='contato comercial')
         self.assertEqual(commercial.route(contacts)[0],'form')
@@ -76,7 +80,7 @@ class CommercialTests(unittest.TestCase):
         self.assertEqual(len(control.snapshot()['commercial_attempts']),2)
 
     def test_manual_whatsapp_not_sent_and_opt_out(self):
-        jid = self.job(contacts={'phone':{'value':'+5514999999999'},'whatsapp':{'status':'presumido'}})
+        jid = self.job(contacts={'phone':{'value':'+5514999999999','source':'https://example.org/ficha','checked_at':control.now()[:10]},'whatsapp':{'status':'presumido'}})
         prepared = control.prepare_commercial(jid)
         self.assertEqual(prepared['channel'],'whatsapp_manual')
         self.assertIn('text=',prepared['whatsapp_url'])
@@ -99,6 +103,71 @@ class CommercialTests(unittest.TestCase):
         control.record_commercial(jid,'opted_out','Recusa explícita informada pela empresa')
         with self.assertRaisesRegex(ValueError,'review'):
             control.prepare_commercial(jid)
+
+    def test_whatsapp_requires_traceable_public_number_and_respects_contrary_evidence(self):
+        phone = {'value':'+5514999999999','source':'https://example.org/ficha','checked_at':control.now()[:10]}
+        self.assertEqual(commercial.route({'phone':phone})[0],'whatsapp_manual')
+        for invalid in ({'value':phone['value']},{**phone,'source':'javascript:bad'},
+                        {**phone,'source':'http://localhost/ficha'},
+                        {**phone,'checked_at':'2026-02-30'},{**phone,'value':'123'}):
+            self.assertEqual(commercial.route({'phone':invalid})[0],'no_channel')
+        for contrary in (False,{'status':'nao_utiliza'}):
+            self.assertEqual(commercial.route({'phone':phone,'whatsapp':contrary})[0],'no_channel')
+        confirmed = {'status':'confirmado','value':'+5514888888888',
+                     'source':'https://example.org/whatsapp','checked_at':control.now()[:10]}
+        self.assertEqual(commercial.route({'phone':phone,'whatsapp':confirmed}),('whatsapp_manual',confirmed['value']))
+        self.assertEqual(commercial.route({'phone':phone,'whatsapp':{**confirmed,'source':''}})[0],'no_channel')
+
+    def test_response_requires_confirmed_contact_and_external_proof(self):
+        jid = self.job(contacts={'email':{'status':'encontrado','value':'public@example.org'}})
+        control.prepare_commercial(jid)
+        for response in ('replied','interested','not_interested'):
+            with self.assertRaisesRegex(ValueError,'confirmed prior contact'):
+                control.record_commercial(jid,response,'Empresa respondeu')
+        with self.assertRaisesRegex(ValueError,'reference'):
+            control.record_commercial(jid,'sent','Envio observado')
+        result = control.record_commercial(jid,'sent_external','Envio feito fora do dashboard',
+                                            'email','id:message-12345678')
+        self.assertEqual(result['contact_status'],'sent')
+        with self.assertRaisesRegex(ValueError,'duplicate contact'):
+            control.record_commercial(jid,'sent_external','Segundo envio','email','id:message-87654321')
+        control.record_commercial(jid,'replied','Resposta recebida por e-mail')
+        control.record_commercial(jid,'interested','Empresa pediu detalhes')
+        job = control.snapshot()['jobs'][0]
+        self.assertEqual((job['stage'],job['contact_status']),('ready','interested'))
+        self.assertEqual(job['preview_url'],'https://preview.example')
+        self.assertEqual(control.snapshot()['commercial_attempts'][-1]['status'],'sent_external')
+
+    def test_explicit_external_contact_from_pending_and_opt_out(self):
+        jid = self.job()
+        with self.assertRaisesRegex(ValueError,'confirmed prior contact'):
+            control.record_commercial(jid,'replied','Resposta sem contato')
+        with self.assertRaisesRegex(ValueError,'channel'):
+            control.record_commercial(jid,'sent_external','Envio fora do sistema',proof='id:message-12345678')
+        control.record_commercial(jid,'sent_external','Comprovante do contato feito fora do sistema',
+                                  'email','https://example.org/comprovante')
+        control.record_commercial(jid,'opted_out','Solicitou exclusão da lista')
+        with self.assertRaisesRegex(ValueError,'Opt-out'):
+            control.record_commercial(jid,'sent_external','Novo envio','email','id:message-87654321')
+
+    def test_prepared_send_requires_proof_and_legacy_send_supports_response(self):
+        jid = self.job(contacts={'email':{'status':'encontrado','value':'public@example.org'}})
+        control.prepare_commercial(jid)
+        control.record_commercial(jid,'sent','Envio observado no e-mail','', 'id:message-12345678')
+        control.record_commercial(jid,'replied','Resposta observada no e-mail')
+        self.assertEqual(control.snapshot()['jobs'][0]['contact_status'],'replied')
+        with self.assertRaisesRegex(ValueError,'duplicate contact'):
+            control.record_commercial(jid,'sent_external','Nova tentativa','email','id:message-87654321')
+
+        other = control.add(self.batch,'Outra Empresa')['id']
+        with control.connect() as con:
+            con.execute("UPDATE jobs SET stage='sent',contact_status='sent' WHERE id=?",(other,))
+        with self.assertRaisesRegex(ValueError,'recorded send confirmation'):
+            control.record_commercial(other,'replied','Resposta sem envio comprovado')
+        with control.connect() as con:
+            con.execute('INSERT INTO submissions VALUES(?,?,?,?,?,?,?)',
+                        (other,'Mensagem legada','hash','https://example.org/contato','sent','Comprovante legado',control.now()))
+        control.record_commercial(other,'replied','Resposta ao envio legado')
 
     def test_version_two_migration_adds_history_without_losing_rows(self):
         jid = self.job()

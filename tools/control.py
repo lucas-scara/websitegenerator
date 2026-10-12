@@ -698,8 +698,6 @@ def manual_outreach(jid, worker, reason, message, email='', phone=''):
         event(c, jid, 'Manual outreach required: ' + reason.strip())
         return {'id': jid, 'stage': 'manual', 'contact_status': 'manual_required'}
 
-COMMERCIAL_STATES = {'pending','prepared','sent','replied','interested','not_interested','opted_out','uncertain'}
-
 def prepare_commercial(jid, observation=''):
     """Prepare copy only. No external request or production transition occurs."""
     with connect() as c:
@@ -780,11 +778,26 @@ def load_commercial_env():
             value = match.group(2).strip().strip('"\'')
             if value: os.environ.setdefault(match.group(1), value)
 
-def record_commercial(jid, status, evidence):
+def commercial_proof(proof):
+    if not isinstance(proof, str) or not proof.strip():
+        raise ValueError('A send confirmation reference is required')
+    proof = proof.strip()
+    if proof.startswith(('http://','https://')):
+        evidence_url(proof)
+    elif proof.startswith('runs/'):
+        path = (ROOT / proof).resolve()
+        if not path.is_relative_to((ROOT / 'runs').resolve()) or not path.is_file():
+            raise ValueError('Local send evidence must be an existing file under runs/')
+    elif not re.fullmatch(r'id:[A-Za-z0-9._:-]{8,}', proof):
+        raise ValueError('Use an evidence URL, an existing runs/ file, or id:REFERENCE')
+    return proof
+
+def record_commercial(jid, status, evidence, channel='', proof=''):
     """Operator records an observed result; opening a link never calls this."""
-    allowed = {'sent','uncertain','failed_no_send','replied','interested','not_interested','opted_out'}
+    allowed = {'sent','sent_external','uncertain','failed_no_send','replied','interested','not_interested','opted_out'}
     if status not in allowed or not isinstance(evidence,str) or not evidence.strip():
         raise ValueError('Status and observed evidence are required')
+    if status in ('sent','sent_external'): proof = commercial_proof(proof)
     with connect() as c:
         job = c.execute('SELECT * FROM jobs WHERE id=?', (jid,)).fetchone()
         if not job: raise ValueError('Unknown job')
@@ -793,17 +806,32 @@ def record_commercial(jid, status, evidence):
         current = job['contact_status']
         if current == 'opted_out' or c.execute("SELECT 1 FROM commercial_attempts WHERE job_id=? AND status='opted_out'", (jid,)).fetchone():
             raise ValueError('Opt-out prevents further contact')
+        prior = c.execute('SELECT status FROM commercial_attempts WHERE job_id=? ORDER BY id DESC LIMIT 1', (jid,)).fetchone()
         if status in ('sent','uncertain','failed_no_send'):
             if current != 'prepared' or not prepared.get('message'):
                 raise ValueError('A prepared message is required')
-            previous = c.execute('SELECT status FROM commercial_attempts WHERE job_id=? ORDER BY id DESC LIMIT 1', (jid,)).fetchone()
-            if previous and previous['status'] != 'failed_no_send':
+            if prior and prior['status'] != 'failed_no_send':
                 raise ValueError('Prior attempt prevents duplicate contact')
-        elif status != 'opted_out' and current not in ('sent','submitted','replied','interested','not_interested','prepared','manual_required'):
-            raise ValueError('No recorded or prepared contact to update')
-        next_status = {'failed_no_send':'pending'}.get(status,status)
+        elif status == 'sent_external':
+            if (current not in ('not_sent','pending','prepared','manual_required')
+                    or (prior and prior['status'] != 'failed_no_send')
+                    or c.execute('SELECT 1 FROM submissions WHERE job_id=?', (jid,)).fetchone()):
+                raise ValueError('Prior contact or uncertain result prevents duplicate contact')
+            if channel not in ('form','email','whatsapp_manual'):
+                raise ValueError('The actual external channel is required')
+        elif status in ('replied','interested','not_interested'):
+            if current not in ('sent','submitted','replied','interested','not_interested'):
+                raise ValueError('A confirmed prior contact is required before recording a response')
+            confirmed = (c.execute("SELECT 1 FROM commercial_attempts WHERE job_id=? AND status IN ('sent','sent_external')", (jid,)).fetchone()
+                         or c.execute("SELECT 1 FROM submissions WHERE job_id=? AND status IN ('submitted','sent')", (jid,)).fetchone())
+            if not confirmed:
+                raise ValueError('A recorded send confirmation is required before a response')
+        next_status = {'failed_no_send':'pending','sent_external':'sent'}.get(status,status)
+        recorded_channel = channel if status == 'sent_external' else prepared.get('channel','legacy')
+        recorded_message = '' if status == 'sent_external' else prepared.get('message','')
+        recorded_evidence = evidence.strip() + (' | Comprovante: ' + proof if proof else '')
         c.execute('INSERT INTO commercial_attempts(job_id,channel,status,message,evidence,created_at) VALUES(?,?,?,?,?,?)',
-                  (jid,prepared.get('channel','legacy'),status,prepared.get('message',''),evidence.strip(),now()))
+                  (jid,recorded_channel,status,recorded_message,recorded_evidence,now()))
         if status == 'failed_no_send': data.pop('commercial_contact',None)
         c.execute('UPDATE jobs SET contact_status=?,data=?,updated_at=? WHERE id=?',
                   (next_status,json.dumps(data,ensure_ascii=False),now(),jid))
@@ -872,7 +900,7 @@ def serve(port):
                 if self.path=='/api/commercial/prepare':
                     self.send(200,prepare_commercial(data.get('job_id'),data.get('observation','')))
                 elif self.path=='/api/commercial/record':
-                    self.send(200,record_commercial(data.get('job_id'),data.get('status'),data.get('evidence','')))
+                    self.send(200,record_commercial(data.get('job_id'),data.get('status'),data.get('evidence',''),data.get('channel',''),data.get('proof','')))
                 elif self.path=='/api/sites':
                     result=create_quick_site(data)
                     result['preview_url']='/preview/'+result['id']+'/'
@@ -901,7 +929,7 @@ def main():
     s=sub.add_parser('contact-finish'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--status',choices=['submitted','sent','uncertain','blocked'],required=True); s.add_argument('--evidence',required=True)
     s=sub.add_parser('manual-outreach'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--reason',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--email',default=''); s.add_argument('--phone',default='')
     s=sub.add_parser('commercial-prepare'); s.add_argument('--job',required=True); s.add_argument('--observation',default='')
-    s=sub.add_parser('commercial-record'); s.add_argument('--job',required=True); s.add_argument('--status',choices=['sent','uncertain','failed_no_send','replied','interested','not_interested','opted_out'],required=True); s.add_argument('--evidence',required=True)
+    s=sub.add_parser('commercial-record'); s.add_argument('--job',required=True); s.add_argument('--status',choices=['sent','sent_external','uncertain','failed_no_send','replied','interested','not_interested','opted_out'],required=True); s.add_argument('--evidence',required=True); s.add_argument('--channel',choices=['form','email','whatsapp_manual'],default=''); s.add_argument('--proof',default='')
     s=sub.add_parser('recover'); s.add_argument('--job',required=True); s.add_argument('--reason',required=True)
     s=sub.add_parser('batch-status'); s.add_argument('--batch',required=True); s.add_argument('--status',choices=['running','complete','blocked','exhausted'],required=True)
     s=sub.add_parser('cancel-batch'); s.add_argument('--batch',required=True); s.add_argument('--reason',required=True)
@@ -922,7 +950,7 @@ def main():
         elif a.cmd=='contact-finish': result=contact_finish(a.job,a.worker,a.status,a.evidence)
         elif a.cmd=='manual-outreach': result=manual_outreach(a.job,a.worker,a.reason,a.message_file.read_text(),a.email,a.phone)
         elif a.cmd=='commercial-prepare': result=prepare_commercial(a.job,a.observation)
-        elif a.cmd=='commercial-record': result=record_commercial(a.job,a.status,a.evidence)
+        elif a.cmd=='commercial-record': result=record_commercial(a.job,a.status,a.evidence,a.channel,a.proof)
         elif a.cmd=='capacity':
             with connect() as c: c.execute("UPDATE config SET value=? WHERE key='max_workers'",(str(a.count),))
             result={'max_workers':a.count}
