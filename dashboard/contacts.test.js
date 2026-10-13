@@ -112,3 +112,12 @@ test('produção publicada e contato comercial permanecem separados', () => {
   assert.equal(display.productionCategory(job), 'ready');
   assert.match(display.commercialSection(job), /<option value="replied">/);
 });
+
+test('operações mostram tentativas sem injetar HTML em falhas e artefatos', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.operations = [{ job_id: "job-1", kind: "deploy", status: "uncertain", executor: "vercel-cli", model: null, attempts: 1, duration_seconds: null, failure: "<script>alert(1)</script>", artifact: "runs/job-1/file", remote_url: "javascript:alert(1)" }]; this.operationSection = operationSection;', display);
+  const html = display.operationSection({ id: 'job-1' });
+  assert.match(html, /resultado|uncertain/);
+  assert.match(html, /&lt;script&gt;/);
+  assert.doesNotMatch(html, /<script>|href="javascript:/);
+});

@@ -290,7 +290,11 @@ class WorkflowTests(unittest.TestCase):
             before = {table: [tuple(row) for row in raw.execute('SELECT * FROM ' + table)] for table in tables}
         with control.connect() as con:
             after = {table: [tuple(row) for row in con.execute('SELECT * FROM ' + table)] for table in tables}
-            self.assertEqual(before, after)
+            for table in tables:
+                if table == 'config':
+                    self.assertTrue(set(before[table]) <= set(after[table]))
+                else:
+                    self.assertEqual(before[table], after[table])
             self.assertEqual(con.execute('PRAGMA foreign_key_check').fetchall(), [])
             self.assertEqual(next(row for row in con.execute('PRAGMA table_info(jobs)') if row['name'] == 'domain')['notnull'], 0)
             self.assertEqual(con.execute('PRAGMA user_version').fetchone()[0], control.SCHEMA_VERSION)
@@ -299,7 +303,10 @@ class WorkflowTests(unittest.TestCase):
                 con.execute("INSERT INTO identities VALUES('email:bad@example.org','missing')")
         with control.connect() as con:
             self.assertEqual(con.execute('PRAGMA user_version').fetchone()[0], control.SCHEMA_VERSION)
-            self.assertEqual({table: [tuple(row) for row in con.execute('SELECT * FROM ' + table)] for table in tables}, before)
+            for table in tables:
+                rows = [tuple(row) for row in con.execute('SELECT * FROM ' + table)]
+                if table == 'config': self.assertTrue(set(before[table]) <= set(rows))
+                else: self.assertEqual(rows, before[table])
 
     def test_legacy_verified_preview_counts_without_new_deployment_field(self):
         legacy = self.legacy_db()

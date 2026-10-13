@@ -55,7 +55,14 @@ def identity(value):
         return 'phone:' + raw
     raise ValueError('Identity must use domain:, phone: or email:')
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+def operation_limits():
+    """Project defaults; persisted SQLite config remains authoritative."""
+    settings = json.loads((ROOT / 'settings.json').read_text())
+    return {'max_workers': min(4, max(1, int(settings.get('max_concurrent_businesses', 1)))),
+            'max_external_calls': max(1, int(settings.get('external_operations', {}).get('max_concurrent_calls', 1))),
+            'max_deploys': max(1, int(settings.get('deployment', {}).get('max_concurrent_deployments', 1)))}
 
 
 def migrate(con, hook=None):
@@ -104,7 +111,7 @@ def migrate(con, hook=None):
             con.execute("""CREATE TABLE IF NOT EXISTS workers(id TEXT PRIMARY KEY,job_id TEXT,status TEXT NOT NULL,updated_at TEXT NOT NULL)""")
             con.execute("""CREATE TABLE IF NOT EXISTS submissions(job_id TEXT PRIMARY KEY REFERENCES jobs(id),message TEXT NOT NULL,message_hash TEXT NOT NULL,form_url TEXT NOT NULL,status TEXT NOT NULL,evidence TEXT,created_at TEXT NOT NULL)""")
             con.execute("""CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY,value TEXT NOT NULL)""")
-            con.execute("INSERT OR IGNORE INTO config VALUES ('max_workers','3')")
+            con.execute("INSERT OR IGNORE INTO config VALUES ('max_workers',?)", (str(operation_limits()['max_workers']),))
             if con.execute('PRAGMA foreign_key_check').fetchone():
                 raise ValueError('Ledger foreign key check failed')
             if con.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
@@ -114,6 +121,20 @@ def migrate(con, hook=None):
             id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL REFERENCES jobs(id),
             channel TEXT NOT NULL, status TEXT NOT NULL, message TEXT NOT NULL,
             evidence TEXT NOT NULL, created_at TEXT NOT NULL)''')
+        con.execute('''CREATE TABLE IF NOT EXISTS operations(
+            job_id TEXT NOT NULL REFERENCES jobs(id), kind TEXT NOT NULL,
+            operation_key TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL,
+            started_at TEXT NOT NULL, finished_at TEXT, artifact TEXT,
+            remote_id TEXT, remote_url TEXT, failure TEXT,
+            executor TEXT NOT NULL, model TEXT, duration_seconds REAL,
+            usage_json TEXT, PRIMARY KEY(job_id,kind,operation_key))''')
+        con.execute('''CREATE TABLE IF NOT EXISTS stage_runs(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL REFERENCES jobs(id),
+            stage TEXT NOT NULL, status TEXT NOT NULL, attempt INTEGER NOT NULL,
+            started_at TEXT NOT NULL, finished_at TEXT, duration_seconds REAL,
+            executor TEXT, model TEXT, effort TEXT, usage_json TEXT, failure TEXT)''')
+        for key, value in operation_limits().items():
+            con.execute('INSERT OR IGNORE INTO config VALUES (?,?)', (key, str(value)))
         con.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
         con.execute('COMMIT')
     except BaseException:
@@ -146,6 +167,42 @@ def connect():
 
 def event(c, job, message):
     c.execute('INSERT INTO events(job_id,message,created_at) VALUES(?,?,?)', (job, message[:4000], now()))
+
+def stage_start(c, jid, stage, worker, model=None):
+    attempt = c.execute('SELECT COUNT(*) FROM stage_runs WHERE job_id=? AND stage=?', (jid,stage)).fetchone()[0] + 1
+    c.execute('INSERT INTO stage_runs(job_id,stage,status,attempt,started_at,executor,model) VALUES(?,?,?,?,?,?,?)',
+              (jid,stage,'running',attempt,dt.datetime.now(dt.timezone.utc).isoformat(timespec='milliseconds'),worker,model))
+
+def stage_finish(c, jid, status='complete', failure=None):
+    row = c.execute("SELECT id,started_at FROM stage_runs WHERE job_id=? AND status='running' ORDER BY id DESC LIMIT 1",(jid,)).fetchone()
+    if row:
+        ended = dt.datetime.now(dt.timezone.utc)
+        duration = max(0.0,(ended-dt.datetime.fromisoformat(row['started_at'])).total_seconds())
+        c.execute('UPDATE stage_runs SET status=?,finished_at=?,duration_seconds=?,failure=? WHERE id=?',
+                  (status,ended.isoformat(timespec='milliseconds'),duration,(failure or '')[:500] or None,row['id']))
+
+def source_usage(usage):
+    """Keep only numeric counters supplied by the executor; never persist arbitrary payloads."""
+    if usage is None: return None
+    if not isinstance(usage,dict): raise ValueError('Invalid source usage')
+    keys = ('input_tokens','output_tokens','cached_input_tokens','total_tokens')
+    clean = {key: value for key in keys if isinstance((value := usage.get(key)),int) and not isinstance(value,bool) and value >= 0}
+    return clean or None
+
+def record_agent_execution(jid, worker, thread_id, model, effort, usage=None):
+    """Attach only verified Codex metadata supplied by agent_exec to the active stage."""
+    if not re.fullmatch(r'[a-f0-9-]{20,80}',thread_id): raise ValueError('Invalid Codex thread ID')
+    if model not in ('gpt-6-luna','gpt-6-sol') or effort not in ('low','medium','high'):
+        raise ValueError('Invalid observed model or effort')
+    usage = source_usage(usage)
+    with connect() as c:
+        own(c,jid,worker)
+        row = c.execute("SELECT id FROM stage_runs WHERE job_id=? AND status='running' ORDER BY id DESC LIMIT 1",(jid,)).fetchone()
+        if not row: raise ValueError('No active stage for agent execution')
+        c.execute('UPDATE stage_runs SET executor=?,model=?,effort=?,usage_json=? WHERE id=?',
+                  ('codex:'+thread_id,model,effort,json.dumps(usage) if usage is not None else None,row['id']))
+        event(c,jid,'Verified Codex route: '+model+'/'+effort)
+        return {'job_id':jid,'model':model,'effort':effort,'usage_available':usage is not None}
 
 def production_status(job):
     data = json.loads(job['data']) if isinstance(job['data'], str) else job['data']
@@ -206,11 +263,15 @@ def batch_status(bid, status):
 def snapshot():
     with connect() as c:
         out = {table: [dict(r) for r in c.execute('SELECT * FROM ' + table + (' ORDER BY id DESC LIMIT 200' if table == 'events' else ''))] for table in ('batches', 'jobs', 'events', 'workers')}
+        out['operations'] = [dict(r) for r in c.execute('''SELECT operations.*,jobs.batch_id FROM operations
+            JOIN jobs ON jobs.id=operations.job_id ORDER BY operations.started_at DESC LIMIT 200''')]
+        out['stage_runs'] = [dict(r) for r in c.execute('''SELECT stage_runs.*,jobs.batch_id FROM stage_runs
+            JOIN jobs ON jobs.id=stage_runs.job_id ORDER BY stage_runs.id DESC LIMIT 400''')]
         for j in out['jobs']: j['data'] = json.loads(j['data'])
         out['commercial_attempts'] = [dict(r) for r in c.execute('SELECT * FROM commercial_attempts ORDER BY id DESC')]
         out['legacy_submissions'] = [dict(r) for r in c.execute('SELECT * FROM submissions')]
         for b in out['batches']: b.update(batch_progress(c, b['id']))
-        out['settings'] = {'batch_size': 3, 'max_workers': int(c.execute("SELECT value FROM config WHERE key='max_workers'").fetchone()[0])}
+        out['settings'] = {'batch_size': 3, **{key: int(c.execute('SELECT value FROM config WHERE key=?', (key,)).fetchone()[0]) for key in operation_limits()}}
         out['templates'] = [{'id': k, 'name': v['name']} for k,v in TEMPLATES.items()]
         out['server_time'] = now()
         return out
@@ -243,6 +304,9 @@ def cancel_batch(bid, reason):
             c.execute('UPDATE jobs SET stage=?,detail=?,worker=NULL,updated_at=?,contact_status=? WHERE id=?', (stage, detail, now(), 'uncertain' if attempted else 'not_sent', job['id']))
             if attempted:
                 c.execute("UPDATE submissions SET status='uncertain',evidence=? WHERE job_id=?", (detail, job['id']))
+            c.execute("UPDATE operations SET status='uncertain',finished_at=?,failure=? WHERE job_id=? AND status='running'",
+                      (now(),'Batch cancelled; reconcile before retry',job['id']))
+            stage_finish(c,job['id'],'failed',reason)
             c.execute("UPDATE workers SET status='idle',updated_at=? WHERE job_id=?", (now(), job['id']))
             event(c, job['id'], f'Batch cancelled: {detail}')
         c.execute("UPDATE batches SET status='cancelled' WHERE id=?", (bid,))
@@ -257,7 +321,7 @@ def clear_all(reason):
     with connect() as c:
         counts = {table: c.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] for table in ('batches','jobs','identities','events','workers','submissions')}
         # Delete children before their referenced parents. `config` intentionally survives.
-        for table in ('commercial_attempts','submissions','events','workers','identities','jobs','batches'):
+        for table in ('stage_runs','operations','commercial_attempts','submissions','events','workers','identities','jobs','batches'):
             c.execute(f'DELETE FROM {table}')
         return {'cleared': counts, 'reason': reason}
 
@@ -397,6 +461,68 @@ def own(c, jid, worker):
         raise ValueError('Worker assignment is no longer active')
     return j
 
+def operation_get(jid, kind, operation_key):
+    with connect() as c:
+        row = c.execute('SELECT * FROM operations WHERE job_id=? AND kind=? AND operation_key=?',
+                        (jid, kind, operation_key)).fetchone()
+        return dict(row) if row else None
+
+def operation_begin(jid, worker, kind, operation_key, executor='local', model=None):
+    """Reserve a durable effect; no network or file work occurs under the SQLite lock."""
+    if kind not in ('generate', 'deploy', 'external') or not re.fullmatch(r'[a-f0-9]{64}', operation_key):
+        raise ValueError('Invalid operation kind or key')
+    if not isinstance(executor, str) or not executor or len(executor) > 80:
+        raise ValueError('Invalid executor')
+    with connect() as c:
+        job = own(c, jid, worker)
+        if kind == 'generate' and job['stage'] != 'building': raise ValueError('Generation requires building stage')
+        if kind == 'deploy' and job['stage'] != 'deploying': raise ValueError('Deploy requires deploying stage')
+        prior = c.execute('SELECT * FROM operations WHERE job_id=? AND kind=? AND operation_key=?',
+                          (jid,kind,operation_key)).fetchone()
+        if prior:
+            if prior['status'] == 'complete': return dict(prior)
+            if prior['status'] in ('running','uncertain'):
+                raise ValueError('Operation already started; reconcile before retry')
+            if kind == 'deploy': raise ValueError('Deploy outcome needs reconciliation before retry')
+        if kind in ('deploy','external'):
+            limit_key = 'max_deploys' if kind == 'deploy' else 'max_external_calls'
+            limit = int(c.execute('SELECT value FROM config WHERE key=?', (limit_key,)).fetchone()[0])
+            active = c.execute("SELECT COUNT(*) FROM operations WHERE kind=? AND status='running'", (kind,)).fetchone()[0]
+            if active >= limit: raise ValueError('External operation capacity reached')
+        if prior:
+            c.execute("UPDATE operations SET status='running',attempts=attempts+1,started_at=?,finished_at=NULL,failure=NULL,executor=?,model=? WHERE job_id=? AND kind=? AND operation_key=?",
+                      (now(),executor,model,jid,kind,operation_key))
+        else:
+            c.execute('INSERT INTO operations(job_id,kind,operation_key,status,attempts,started_at,executor,model) VALUES (?,?,?,?,?,?,?,?)',
+                      (jid,kind,operation_key,'running',1,now(),executor,model))
+        event(c,jid,f'{kind} started; operation {operation_key[:12]}.')
+        return dict(c.execute('SELECT * FROM operations WHERE job_id=? AND kind=? AND operation_key=?',
+                              (jid,kind,operation_key)).fetchone())
+
+def operation_finish(jid, worker, kind, operation_key, *, status='complete', artifact=None,
+                     remote_id=None, remote_url=None, failure=None, duration_seconds=None,
+                     usage=None, reconciled=False):
+    if status not in ('complete','uncertain','failed'):
+        raise ValueError('Invalid operation result')
+    usage = source_usage(usage)
+    with connect() as c:
+        own(c,jid,worker)
+        row = c.execute('SELECT * FROM operations WHERE job_id=? AND kind=? AND operation_key=?',
+                        (jid,kind,operation_key)).fetchone()
+        if not row: raise ValueError('Operation was not reserved')
+        if row['status'] == 'complete': return dict(row)
+        if row['status'] != 'running' and not (reconciled and row['status'] in ('uncertain','failed')):
+            raise ValueError('Operation is not active; reconcile first')
+        if kind == 'deploy' and status == 'complete' and (not remote_id or not remote_url or not remote_url.startswith('https://')):
+            raise ValueError('Deployment ID and HTTPS URL required')
+        c.execute('''UPDATE operations SET status=?,finished_at=?,artifact=?,remote_id=?,remote_url=?,failure=?,duration_seconds=?,usage_json=?
+                     WHERE job_id=? AND kind=? AND operation_key=?''',
+                  (status,now(),artifact,remote_id,remote_url,(failure or '')[:500] or None,duration_seconds,
+                   json.dumps(usage) if usage is not None else None,jid,kind,operation_key))
+        event(c,jid,f'{kind} {status}; operation {operation_key[:12]}.')
+        return dict(c.execute('SELECT * FROM operations WHERE job_id=? AND kind=? AND operation_key=?',
+                              (jid,kind,operation_key)).fetchone())
+
 def claim(bid, worker):
     with connect() as c:
         batch_row = c.execute('SELECT status FROM batches WHERE id=?', (bid,)).fetchone()
@@ -410,7 +536,13 @@ def claim(bid, worker):
         if c.execute("SELECT COUNT(*) FROM workers WHERE status='running'").fetchone()[0]>=limit: raise ValueError('Worker capacity reached')
         j = c.execute("SELECT * FROM jobs WHERE batch_id=? AND stage='queued' AND worker IS NULL ORDER BY rowid LIMIT 1",(bid,)).fetchone()
         if j is None: return {'job': None}
-        c.execute("UPDATE jobs SET worker=?,stage='reviewing',updated_at=? WHERE id=?",(worker,now(),j['id']))
+        data = json.loads(j['data'])
+        resume_stage = data.pop('resume_stage', 'reviewing')
+        if resume_stage not in ('reviewing','verified','qualified','extracting','building','checking','deploying'):
+            raise ValueError('Invalid resume stage')
+        c.execute('UPDATE jobs SET worker=?,stage=?,data=?,updated_at=? WHERE id=?',
+                  (worker,resume_stage,json.dumps(data),now(),j['id']))
+        stage_start(c,j['id'],resume_stage,worker)
         c.execute('INSERT INTO workers VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET job_id=excluded.job_id,status=excluded.status,updated_at=excluded.updated_at',(worker,j['id'],'running',now()))
         c.execute("UPDATE batches SET status='running' WHERE id=?",(bid,))
         event(c,j['id'],f'{worker} claimed this business.')
@@ -488,6 +620,15 @@ def update(jid, worker, stage=None, detail='', fields=None):
         if new=='ready' and (data.get('preview_verified') is not True or not data.get('preview_url',j['preview_url']).startswith('https://')): raise ValueError('Verified HTTPS preview required')
         if new=='ready' and (not isinstance(data.get('deployment'),dict) or not data['deployment'].get('id') or data['deployment'].get('project') != 'scarasoft-previas' or not data.get('qa_evidence')):
             raise ValueError('Deployment ID, approved project and QA evidence required')
+        if new == 'ready':
+            tracked = c.execute("SELECT 1 FROM operations WHERE job_id=? AND kind='deploy'", (jid,)).fetchone()
+            if tracked and not c.execute("SELECT 1 FROM operations WHERE job_id=? AND kind='deploy' AND status='complete' AND remote_id=? AND remote_url=?",
+                                         (jid,data['deployment']['id'],data.get('preview_url',j['preview_url']))).fetchone():
+                raise ValueError('Deployment must match a completed, reconciled operation')
+        if new != j['stage']:
+            stage_finish(c,jid,'failed' if new in ('blocked','skipped') else 'complete',detail if new in ('blocked','skipped') else None)
+            stage_start(c,jid,new,worker)
+            if new in ('blocked','skipped'): stage_finish(c,jid,'failed',detail)
         c.execute('UPDATE jobs SET stage=?,detail=?,reason=?,preview_url=?,data=?,worker=?,updated_at=? WHERE id=?',
                   (new,detail or j['detail'],fields.get('reason',j['reason']),fields.get('preview_url',j['preview_url']),json.dumps(data),
                    None if new in ('blocked','skipped') else worker,now(),jid))
@@ -501,6 +642,7 @@ def preview_finish(jid, worker):
         j = own(c, jid, worker)
         if j['stage'] != 'ready' or production_status(j) != 'published':
             raise ValueError('Only a verified public preview can be finished')
+        stage_finish(c,jid)
         c.execute('UPDATE jobs SET worker=NULL,updated_at=? WHERE id=?', (now(), jid))
         c.execute("UPDATE workers SET status='idle',updated_at=? WHERE id=?", (now(), worker))
         event(c, jid, 'Verified commercial preview completed; no contact performed.')
@@ -514,9 +656,15 @@ def recover(jid, reason):
         attempt = c.execute('SELECT 1 FROM submissions WHERE job_id=?', (jid,)).fetchone()
         if j['stage'] in ('complete','sent','manual','simulated'):
             raise ValueError('Terminal outreach jobs cannot be automatically recovered')
+        stage_finish(c,jid,'uncertain',reason)
         target = 'uncertain' if attempt else ('ready' if production_status(j) == 'published' else 'queued')
-        c.execute('UPDATE jobs SET stage=?,worker=NULL,updated_at=?,contact_status=? WHERE id=?',
-                  (target,now(),'uncertain' if attempt else j['contact_status'],jid))
+        data = json.loads(j['data'])
+        if target == 'queued' and j['stage'] in ('verified','qualified','extracting','building','checking','deploying'):
+            data['resume_stage'] = j['stage']
+        c.execute("UPDATE operations SET status='uncertain',finished_at=?,failure=? WHERE job_id=? AND status='running'",
+                  (now(),'Worker stopped; reconcile before retry',jid))
+        c.execute('UPDATE jobs SET stage=?,worker=NULL,data=?,updated_at=?,contact_status=? WHERE id=?',
+                  (target,json.dumps(data),now(),'uncertain' if attempt else j['contact_status'],jid))
         c.execute("UPDATE workers SET status='idle',updated_at=? WHERE job_id=?", (now(),jid))
         if attempt: c.execute("UPDATE submissions SET status='uncertain',evidence=? WHERE job_id=?", (reason,jid))
         event(c,jid,'Coordinator recovery after worker stopped: '+reason)
@@ -920,7 +1068,10 @@ def main():
     s=sub.add_parser('claim'); s.add_argument('--batch',required=True); s.add_argument('--worker',required=True)
     s=sub.add_parser('update'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--stage',choices=STAGES); s.add_argument('--detail',default=''); s.add_argument('--fields',type=Path)
     s=sub.add_parser('alias'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--identity',required=True)
-    s=sub.add_parser('capacity'); s.add_argument('count',type=int,choices=range(1,6))
+    s=sub.add_parser('capacity'); s.add_argument('count',type=int,choices=range(1,5))
+    s=sub.add_parser('external-limit'); s.add_argument('--kind',choices=['external','deploy'],required=True); s.add_argument('count',type=int,choices=range(1,5))
+    s=sub.add_parser('external-begin'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--key',required=True); s.add_argument('--executor',default='external-tool'); s.add_argument('--model')
+    s=sub.add_parser('external-finish'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--key',required=True); s.add_argument('--status',choices=['complete','uncertain','failed'],required=True); s.add_argument('--reason')
     s=sub.add_parser('preview-finish'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True)
     s=sub.add_parser('site-input'); s.add_argument('--job',required=True); s.add_argument('--output',type=Path,required=True)
     s=sub.add_parser('contact-begin'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--form-url',required=True)
@@ -954,6 +1105,12 @@ def main():
         elif a.cmd=='capacity':
             with connect() as c: c.execute("UPDATE config SET value=? WHERE key='max_workers'",(str(a.count),))
             result={'max_workers':a.count}
+        elif a.cmd=='external-limit':
+            key = 'max_deploys' if a.kind == 'deploy' else 'max_external_calls'
+            with connect() as c: c.execute('UPDATE config SET value=? WHERE key=?',(str(a.count),key))
+            result={key:a.count}
+        elif a.cmd=='external-begin': result=operation_begin(a.job,a.worker,'external',a.key,a.executor,a.model)
+        elif a.cmd=='external-finish': result=operation_finish(a.job,a.worker,'external',a.key,status=a.status,failure=a.reason)
         elif a.cmd=='alias':
             with connect() as c:
                 own(c,a.job,a.worker); c.execute('INSERT INTO identities VALUES(?,?)',(identity(a.identity),a.job)); event(c,a.job,'Verified identity added: '+identity(a.identity))

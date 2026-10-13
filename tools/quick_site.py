@@ -248,16 +248,55 @@ def render_head(page, business, template='electrician'):
     return page.replace('Your Company', esc(business['name']))
 
 
-def create(data, output_root=None):
+_OPERATION_KEY_RE = re.compile(r'^[0-9a-fA-F]{64}$')
+
+
+def _validate_operation_key(operation_key):
+    if operation_key is not None and (not isinstance(operation_key, str) or not _OPERATION_KEY_RE.fullmatch(operation_key)):
+        raise ValueError('operation_key must be a 64-character hexadecimal SHA-256 digest')
+    return operation_key.lower() if operation_key is not None else None
+
+
+def find_generated(output_root, operation_key):
+    """Find a completed generated site by its durable operation key."""
+    operation_key = _validate_operation_key(operation_key)
+    if operation_key is None:
+        raise ValueError('operation_key is required')
+    parent = Path(output_root)
+    if not parent.is_dir():
+        return None
+    for manifest_path in parent.glob('*/website.json'):
+        try:
+            manifest = json.loads(manifest_path.read_text())
+            if manifest.get('operation_key') != operation_key:
+                continue
+            expected_site = (manifest_path.parent / 'site').resolve()
+            site = Path(manifest.get('site', '')).resolve()
+            if site == expected_site and site.is_dir():
+                return manifest
+        except (OSError, ValueError, TypeError, AttributeError):
+            continue
+    return None
+
+
+def create(data, output_root=None, operation_key=None):
     started = time.perf_counter()
+    operation_key = _validate_operation_key(operation_key)
     template, business = validate(data)
+    parent = Path(output_root) if output_root else ROOT / 'runs/quick'
+    if operation_key is not None:
+        input_digest = hashlib.sha256(json.dumps(business, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode()).hexdigest()
+        existing = find_generated(parent, operation_key)
+        if existing is not None:
+            if existing.get('input_digest') != input_digest:
+                raise ValueError('operation_key already belongs to different business input')
+            return existing
     prof = profile(template)
     source = TEMPLATES[template]['path']
     cache = prof['dist']
     stamp = cache / '.prepared.json'
     if not stamp.exists() or json.loads(stamp.read_text())['fingerprint'] != fingerprint(template):
         raise ValueError(f'Template needs preparation. Run: python3 tools/quick_site.py prepare --template {template}')
-    parent = Path(output_root) if output_root else ROOT / 'runs/quick'
     parent.mkdir(parents=True, exist_ok=True)
     ascii_name = unicodedata.normalize('NFKD', business['name']).encode('ascii', 'ignore').decode().lower()
     slug = re.sub(r'[^a-z0-9]+', '-', ascii_name).strip('-')[:48] or 'business'
@@ -274,6 +313,9 @@ def create(data, output_root=None):
         shutil.copyfile(source / 'vercel.json', site / 'vercel.json')
         shutil.copyfile(prof['folder'] / 'stock-images.json', staging / 'stock-images.json')
         result = {'id': identifier, 'template': template, 'business': business, 'site': str(destination / 'site'), 'seconds': round(time.perf_counter()-started, 3)}
+        if operation_key is not None:
+            result['operation_key'] = operation_key
+            result['input_digest'] = input_digest
         (staging / 'website.json').write_text(json.dumps(result, indent=2))
         staging.rename(destination)
         return result

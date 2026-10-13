@@ -11,6 +11,45 @@ quick=importlib.util.module_from_spec(spec);spec.loader.exec_module(quick)
 ENGINE_PUBLIC=Path(__file__).parents[1]/'templates/electrician/public'
 
 class QuickSiteTests(unittest.TestCase):
+    def test_operation_key_is_persisted_and_retry_reuses_completed_site(self):
+        key = 'ab' * 32
+        with tempfile.TemporaryDirectory() as folder, patch.object(quick.subprocess, 'run', side_effect=AssertionError('Unexpected build')):
+            first = quick.create({'name': 'Idempotent', 'phone': '123456789'}, folder, operation_key=key)
+            manifest = quick.find_generated(folder, key)
+            self.assertEqual(manifest, first)
+            self.assertEqual(manifest['operation_key'], key)
+            self.assertRegex(manifest['input_digest'], r'^[0-9a-f]{64}$')
+            # Models a retry after the staging rename completed but before its caller saved the result.
+            with patch.object(quick, 'fingerprint', side_effect=AssertionError('Retry should reuse persisted result')):
+                second = quick.create({'name': 'Idempotent', 'phone': '123456789'}, folder, operation_key=key)
+            self.assertEqual(second['id'], first['id'])
+            self.assertEqual(second['site'], first['site'])
+            self.assertEqual(len(list(Path(folder).glob('*/website.json'))), 1)
+
+    def test_operation_key_rejects_unsafe_values_and_conflicting_input(self):
+        for key in ('../' + 'a' * 61, 'g' * 64, 'a' * 63, 123):
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'operation_key'):
+                quick.create({'name': 'Test', 'phone': '123456789'}, '/tmp', operation_key=key)
+        with tempfile.TemporaryDirectory() as folder:
+            key = 'cd' * 32
+            quick.create({'name': 'Original', 'phone': '123456789'}, folder, operation_key=key)
+            with self.assertRaisesRegex(ValueError, 'different business input'):
+                quick.create({'name': 'Changed', 'phone': '123456789'}, folder, operation_key=key)
+
+    def test_find_generated_requires_matching_key_and_existing_site(self):
+        with tempfile.TemporaryDirectory() as folder:
+            key = 'ef' * 32
+            result = quick.create({'name': 'Lookup', 'phone': '123456789'}, folder, operation_key=key)
+            self.assertIsNone(quick.find_generated(folder, '01' * 32))
+            Path(result['site']).rename(Path(result['site']).with_name('missing-site'))
+            self.assertIsNone(quick.find_generated(folder, key))
+
+    def test_legacy_create_does_not_require_or_write_operation_key(self):
+        with tempfile.TemporaryDirectory() as folder:
+            result = quick.create({'name': 'Legacy', 'phone': '123456789'}, folder)
+            self.assertNotIn('operation_key', result)
+            self.assertNotIn('input_digest', json.loads((Path(result['site']).parent / 'website.json').read_text()))
+
     def test_isolation_escaping_and_no_build_per_business(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(quick.subprocess, 'run', side_effect=AssertionError('Unexpected build')):
             a=quick.create({'name':'O\'Brien & Sons </script><script>alert(1)</script>', 'phone':'+44 20 7946 0958'},folder)
