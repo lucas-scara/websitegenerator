@@ -228,6 +228,34 @@ class PreviewOperationTests(unittest.TestCase):
             preview_ops.reconcile_deploy(jid, worker, key, FakeVercel(match=False))
         self.assertEqual(control.operation_get(jid, 'deploy', key)['status'], 'uncertain')
 
+    def test_uncertain_deploy_frees_global_slot_but_blocks_new_key_for_same_job(self):
+        first, first_worker = self.make_deployable()
+        second = control.add(self.batch_id, 'Second deployment', 'https://second-deployment.example')['id']
+        control.claim(self.batch_id, 'worker-second')
+        self.make_building(second, 'worker-second', 1)
+        control.update(second, 'worker-second', 'checking')
+        control.update(second, 'worker-second', 'deploying', fields={'qa_passed': True, 'qa_evidence': ['qa.json']})
+        with control.connect() as con:
+            con.execute("UPDATE config SET value='1' WHERE key='max_deploys'")
+        key = 'd' * 64
+        control.operation_begin(first, first_worker, 'deploy', key)
+        with self.assertRaisesRegex(ValueError, 'capacity'):
+            control.operation_begin(second, 'worker-second', 'deploy', 'e' * 64)
+        self.assertEqual(control.recover(first, 'Worker stopped with unknown remote result')['stage'], 'queued')
+        with control.connect() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM workers WHERE status='running'").fetchone()[0], 1)
+            self.assertEqual(con.execute("SELECT status FROM operations WHERE job_id=? AND kind='deploy'", (first,)).fetchone()[0], 'uncertain')
+        self.assertEqual(control.operation_begin(second, 'worker-second', 'deploy', 'e' * 64)['status'], 'running')
+        control.claim(self.batch_id, 'worker-retry')
+        client = FakeVercel(match=False)
+        for _ in range(2):
+            with self.assertRaisesRegex(ValueError, 'No matching remote deployment'):
+                preview_ops.reconcile_deploy(first, 'worker-retry', key, client)
+        with self.assertRaisesRegex(ValueError, 'Another deploy outcome'):
+            control.operation_begin(first, 'worker-retry', 'deploy', 'f' * 64)
+        self.assertEqual(client.deploy_calls, 0)
+        self.assertEqual(control.operation_get(first, 'deploy', key)['status'], 'uncertain')
+
     def test_vercel_lookup_matches_project_and_stable_operation_key(self):
         client = preview_ops.VercelClient.__new__(preview_ops.VercelClient)
         client.project_id, client.team_id = 'prj_approved', 'team_approved'
@@ -273,6 +301,24 @@ class PreviewOperationTests(unittest.TestCase):
             self.assertEqual(tuple(con.execute('SELECT * FROM commercial_attempts WHERE job_id=?', (jid,)).fetchone()), expected)
             self.assertIsNotNone(con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='operations'").fetchone())
             self.assertEqual(con.execute('PRAGMA foreign_key_check').fetchall(), [])
+
+    def test_previously_migrated_capacity_requires_expected_value(self):
+        historical = control.add(self.batch_id, 'Historical capacity', 'https://capacity.example')['id']
+        with control.connect() as con:
+            con.execute("UPDATE config SET value='3' WHERE key='max_workers'")
+            con.execute('DROP TABLE operations')
+            con.execute('DROP TABLE stage_runs')
+            con.execute('PRAGMA user_version=3')
+        with control.connect() as con:
+            self.assertEqual(con.execute("SELECT value FROM config WHERE key='max_workers'").fetchone()[0], '3')
+            self.assertEqual(con.execute('SELECT name FROM jobs WHERE id=?', (historical,)).fetchone()[0], 'Historical capacity')
+        self.assertEqual(control.set_capacity(4, expected=3), {'previous_max_workers':3, 'max_workers':4})
+        with control.connect() as con:
+            con.execute("UPDATE config SET value='2' WHERE key='max_workers'")
+        with self.assertRaisesRegex(ValueError, 'customized'):
+            control.set_capacity(4, expected=3)
+        with control.connect() as con:
+            self.assertEqual(con.execute("SELECT value FROM config WHERE key='max_workers'").fetchone()[0], '2')
 
 
 if __name__ == '__main__':

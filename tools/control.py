@@ -64,6 +64,17 @@ def operation_limits():
             'max_external_calls': max(1, int(settings.get('external_operations', {}).get('max_concurrent_calls', 1))),
             'max_deploys': max(1, int(settings.get('deployment', {}).get('max_concurrent_deployments', 1)))}
 
+def set_capacity(count, expected=None):
+    """Change persisted business capacity, optionally only from an observed value."""
+    if count not in range(1, 5) or (expected is not None and expected not in range(1, 5)):
+        raise ValueError('Business capacity must be between 1 and 4')
+    with connect() as c:
+        previous = int(c.execute("SELECT value FROM config WHERE key='max_workers'").fetchone()[0])
+        if expected is not None and previous != expected:
+            raise ValueError(f'Capacity changed or was customized: expected {expected}, found {previous}')
+        c.execute("UPDATE config SET value=? WHERE key='max_workers'", (str(count),))
+        return {'previous_max_workers': previous, 'max_workers': count}
+
 
 def migrate(con, hook=None):
     """Atomically initialize or migrate the ledger; keep FK checks on for normal work."""
@@ -477,6 +488,10 @@ def operation_begin(jid, worker, kind, operation_key, executor='local', model=No
         job = own(c, jid, worker)
         if kind == 'generate' and job['stage'] != 'building': raise ValueError('Generation requires building stage')
         if kind == 'deploy' and job['stage'] != 'deploying': raise ValueError('Deploy requires deploying stage')
+        if kind == 'deploy' and c.execute("""SELECT 1 FROM operations WHERE job_id=? AND kind='deploy'
+                                            AND status IN ('running','uncertain','failed') AND operation_key<>?""",
+                                          (jid,operation_key)).fetchone():
+            raise ValueError('Another deploy outcome for this business needs reconciliation before a new operation')
         prior = c.execute('SELECT * FROM operations WHERE job_id=? AND kind=? AND operation_key=?',
                           (jid,kind,operation_key)).fetchone()
         if prior:
@@ -1068,7 +1083,7 @@ def main():
     s=sub.add_parser('claim'); s.add_argument('--batch',required=True); s.add_argument('--worker',required=True)
     s=sub.add_parser('update'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--stage',choices=STAGES); s.add_argument('--detail',default=''); s.add_argument('--fields',type=Path)
     s=sub.add_parser('alias'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--identity',required=True)
-    s=sub.add_parser('capacity'); s.add_argument('count',type=int,choices=range(1,5))
+    s=sub.add_parser('capacity'); s.add_argument('count',type=int,choices=range(1,5)); s.add_argument('--if-current',type=int,choices=range(1,5))
     s=sub.add_parser('external-limit'); s.add_argument('--kind',choices=['external','deploy'],required=True); s.add_argument('count',type=int,choices=range(1,5))
     s=sub.add_parser('external-begin'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--key',required=True); s.add_argument('--executor',default='external-tool'); s.add_argument('--model')
     s=sub.add_parser('external-finish'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--key',required=True); s.add_argument('--status',choices=['complete','uncertain','failed'],required=True); s.add_argument('--reason')
@@ -1102,9 +1117,7 @@ def main():
         elif a.cmd=='manual-outreach': result=manual_outreach(a.job,a.worker,a.reason,a.message_file.read_text(),a.email,a.phone)
         elif a.cmd=='commercial-prepare': result=prepare_commercial(a.job,a.observation)
         elif a.cmd=='commercial-record': result=record_commercial(a.job,a.status,a.evidence,a.channel,a.proof)
-        elif a.cmd=='capacity':
-            with connect() as c: c.execute("UPDATE config SET value=? WHERE key='max_workers'",(str(a.count),))
-            result={'max_workers':a.count}
+        elif a.cmd=='capacity': result=set_capacity(a.count,a.if_current)
         elif a.cmd=='external-limit':
             key = 'max_deploys' if a.kind == 'deploy' else 'max_external_calls'
             with connect() as c: c.execute('UPDATE config SET value=? WHERE key=?',(str(a.count),key))
