@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 
 SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/gmail.send']
+APPROVED_SENDER = 'scarasoftbauru@gmail.com'
 AUTH_FILE = None  # resolved against the ledger root, or overridden in tests
 SENDER_FILE = None
 TOKEN_FILE = None
@@ -54,7 +55,7 @@ def authorization(ledger, job, *, live=False):
              and isinstance(auth.get('job_ids'), list) and job['id'] in auth['job_ids']
              and all(isinstance(x, str) for x in auth['job_ids'])
              and len(auth['job_ids']) == len(set(auth['job_ids']))
-             and email_address(auth.get('sender'))
+             and auth.get('sender') == APPROVED_SENDER
              and type(auth.get('max_contacts')) is int and 1 <= auth['max_contacts'] <= 100
              and type(auth.get('daily_limit', 5)) is int and 1 <= auth.get('daily_limit', 5) <= 100)
     if not valid:
@@ -72,9 +73,8 @@ def authorization(ledger, job, *, live=False):
 def sender_config(ledger, sender):
     cfg = private_json(private_path(ledger, SENDER_FILE, 'gmail-sender.json'))
     if (not email_address(cfg.get('oauth_email')) or not email_address(cfg.get('sender'))
-            or cfg['sender'].lower() != sender
-            or cfg.get('alias_verified') is not True or cfg.get('domain_dns_checked') is not True):
-        raise PreSendError('Gmail sender or verified alias is not configured for live sending')
+            or cfg['sender'].lower() != sender or cfg['oauth_email'].lower() != sender):
+        raise PreSendError('Authenticated Gmail account must be the approved sender')
     return cfg['oauth_email'].lower()
 
 def validate(ledger, c, job):

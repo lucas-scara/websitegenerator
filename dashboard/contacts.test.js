@@ -115,12 +115,12 @@ test('produção publicada e contato comercial permanecem separados', () => {
 
 test('mensagem de e-mail preparada mostra simulação e não oferece preparo duplicado', () => {
   const display = vm.createContext({ URL, Intl, Date });
-  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.gmail_authorization = { "job-1": { mode: "live", authorized: true, sender: "contato@scarasoft.com.br", reason: "Autorizado" } }; this.commercialSection = commercialSection;', display);
+  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.gmail_authorization = { "job-1": { mode: "live", authorized: true, sender: "scarasoftbauru@gmail.com", reason: "Autorizado" } }; this.commercialSection = commercialSection;', display);
   const job = { id: 'job-1', stage: 'ready', contact_status: 'prepared', preview_url: 'https://preview.example',
     data: { preview_verified: true, commercial_contact: { channel: 'email', destination: 'empresa@example.org', subject: 'Proposta', message: 'Texto preparado' } } };
   const html = display.commercialSection(job);
   assert.match(html, /Destinatário: empresa@example.org/);
-  assert.match(html, /Remetente: contato@scarasoft.com.br/);
+  assert.match(html, /Remetente: scarasoftbauru@gmail.com/);
   assert.match(html, /id="gmail-simulate"/);
   assert.match(html, /id="gmail-send"/);
   assert.doesNotMatch(html, /id="prepare-commercial"/);

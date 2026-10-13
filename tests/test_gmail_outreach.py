@@ -14,7 +14,7 @@ spec.loader.exec_module(control)
 gmail = control.gmail_outreach
 
 class FakeGmail:
-    def __init__(self, response=None, error=None, account='lucas@example.org'):
+    def __init__(self, response=None, error=None, account='scarasoftbauru@gmail.com'):
         self.response = response or {'id':'gmail12345678','threadId':'thread12345678'}
         self.error = error
         self.account = account
@@ -50,12 +50,11 @@ class GmailTests(unittest.TestCase):
     def private(self, path, data):
         path.write_text(json.dumps(data))
         path.chmod(0o600)
-    def authorize(self, jobs=None, max_contacts=3, daily_limit=5, sender='contato@scarasoft.com.br'):
+    def authorize(self, jobs=None, max_contacts=3, daily_limit=5, sender='scarasoftbauru@gmail.com'):
         self.private(gmail.AUTH_FILE, {'mode':'live','approved_by':'Lucas Scaranello',
                      'approved_at':control.now(),'batch_id':self.batch,'job_ids':jobs or [self.job],
                      'sender':sender,'max_contacts':max_contacts,'daily_limit':daily_limit})
-        self.private(gmail.SENDER_FILE, {'oauth_email':'lucas@example.org','sender':sender,
-                     'alias_verified':True,'domain_dns_checked':True})
+        self.private(gmail.SENDER_FILE, {'oauth_email':'scarasoftbauru@gmail.com','sender':sender})
     def new_job(self, name, email, form=None):
         jid = control.add(self.batch, name)['id']
         contacts = {'email':{'status':'encontrado','value':email,'source':'https://example.org/ficha','checked_at':control.now()[:10]},
@@ -97,8 +96,9 @@ class GmailTests(unittest.TestCase):
         self.prepare(); self.authorize(jobs=['other-job'])
         with self.assertRaisesRegex(ValueError,'scope'): self.dispatch()
         self.authorize(sender='other@example.org')
-        self.private(gmail.SENDER_FILE, {'oauth_email':'lucas@example.org','sender':'contato@scarasoft.com.br',
-                     'alias_verified':True,'domain_dns_checked':True})
+        with self.assertRaisesRegex(ValueError,'scope'): self.dispatch()
+        self.authorize()
+        self.private(gmail.SENDER_FILE, {'oauth_email':'wrong@example.org','sender':'scarasoftbauru@gmail.com'})
         with self.assertRaisesRegex(ValueError,'sender'): self.dispatch()
     def test_daily_and_batch_limits(self):
         other = self.new_job('Empresa Dois','second@example.org')
@@ -146,7 +146,7 @@ class GmailTests(unittest.TestCase):
                 raw = base64.urlsafe_b64decode(json['raw'] + '===')
                 msg = message_from_bytes(raw, policy=policy.default)
                 self_outer.assertEqual(msg['To'],'empresa@example.org')
-                self_outer.assertIn('scarasoft.com.br',msg['From'])
+                self_outer.assertIn('scarasoftbauru@gmail.com',msg['From'])
                 self_outer.assertIsNone(msg['Cc'])
                 self_outer.assertIsNone(msg['Bcc'])
                 self_outer.assertEqual(len(list(msg.iter_attachments())),0)
@@ -155,7 +155,7 @@ class GmailTests(unittest.TestCase):
         self_outer = self
         client = gmail.GmailClient.__new__(gmail.GmailClient)
         client.session = Session()
-        self.assertEqual(client.send('empresa@example.org','contato@scarasoft.com.br','Proposta','Veja a prévia')['id'],'gmail12345678')
+        self.assertEqual(client.send('empresa@example.org','scarasoftbauru@gmail.com','Proposta','Veja a prévia')['id'],'gmail12345678')
     def test_gmail_quota_rejection_is_definite_and_server_error_uncertain(self):
         class Response:
             def __init__(self, code): self.status_code = code
@@ -166,10 +166,10 @@ class GmailTests(unittest.TestCase):
         for code in (401,403,429):
             client.session = Session(code)
             with self.assertRaises(gmail.PreSendError):
-                client.send('empresa@example.org','contato@scarasoft.com.br','Proposta','Corpo')
+                client.send('empresa@example.org','scarasoftbauru@gmail.com','Proposta','Corpo')
         client.session = Session(503)
         with self.assertRaises(gmail.UncertainError):
-            client.send('empresa@example.org','contato@scarasoft.com.br','Proposta','Corpo')
+            client.send('empresa@example.org','scarasoftbauru@gmail.com','Proposta','Corpo')
     def test_timeout_uncertain_and_explicit_reconciliation(self):
         self.prepare(); self.authorize()
         result = self.dispatch(client=FakeGmail(error=TimeoutError()))

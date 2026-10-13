@@ -12,19 +12,21 @@ O envio usa a mensagem e o canal preparados em `commercial-prepare`. O estado de
 
 ## Remetente e domínio
 
-`contato@scarasoft.com.br` recebe pelo Cloudflare Email Routing, mas isso não habilita o envio no Gmail. Antes de autorizar live, configure-o na conta Google em **Configurações → Contas e importação → Enviar e-mail como**, conclua a verificação enviada ao endereço encaminhado e confirme o método de saída/SMTP oferecido pela conta. Faça um teste manual de envio e inspecione o cabeçalho `From` efetivo e a entrega. Não use outro remetente sem aprovação explícita.
+O remetente aprovado para este fluxo é **`scarasoftbauru@gmail.com`**, autenticado como a própria conta Google no OAuth. O backend exige coincidência exata entre o remetente autorizado, `oauth_email` e o e-mail verificado pelo Google. Não use `contato@scarasoft.com.br` no cabeçalho `From` deste fluxo.
 
-Confira os registros SPF, DKIM e DMARC publicados para `scarasoft.com.br` e se o provedor de saída efetivamente usado está autorizado e assina o domínio. Exemplos: `dig TXT scarasoft.com.br`, `dig TXT _dmarc.scarasoft.com.br` e o seletor DKIM informado pelo provedor (`dig TXT SELECTOR._domainkey.scarasoft.com.br`). Cloudflare Email Routing cobre recebimento, não autentica por si só a saída. Documente a verificação privada em `runs/`.
+`contato@scarasoft.com.br` continua sendo o endereço comercial divulgado na assinatura e recebe mensagens por encaminhamento do Cloudflare Email Routing. Isso não habilita envio a partir dele. Respostas ao e-mail enviado pelo Gmail vão, por padrão, para `scarasoftbauru@gmail.com`; o operador deve acompanhar essa caixa para respostas e pedidos de exclusão.
 
-Consulta DNS pública em 2026-10-12: SPF `v=spf1 include:_spf.mx.cloudflare.net ~all`; DMARC `v=DMARC1; p=reject;`. O seletor DKIM e o provedor de saída ainda não foram confirmados. Esses registros **não demonstram** que um envio via Gmail com `From: contato@scarasoft.com.br` passará no alinhamento DMARC. Mantenha `domain_dns_checked` falso/ausente até validar SPF ou DKIM alinhado com o serviço efetivamente usado e inspecionar um envio manual de teste.
+Se no futuro for aprovado o envio com `From` no domínio `scarasoft.com.br`, confira SPF, DKIM e DMARC e o alinhamento com o provedor de saída. Exemplos: `dig TXT scarasoft.com.br`, `dig TXT _dmarc.scarasoft.com.br` e o seletor DKIM informado pelo provedor (`dig TXT SELECTOR._domainkey.scarasoft.com.br`). Cloudflare Email Routing cobre recebimento, não autentica por si só a saída. Documente a verificação privada em `runs/`.
 
-Após confirmar conta, alias e DNS, crie `data/gmail-sender.json` com permissão 600:
+Consulta DNS pública em 2026-10-12: SPF `v=spf1 include:_spf.mx.cloudflare.net ~all`; DMARC `v=DMARC1; p=reject;`. O seletor DKIM e o provedor de saída do domínio ainda não foram confirmados. Esses registros **não demonstram** que um envio via Gmail com `From: contato@scarasoft.com.br` passaria no alinhamento DMARC. Isso não impede o envio como `scarasoftbauru@gmail.com`, sujeito às verificações da própria conta Google.
+
+Após autenticar a conta Gmail aprovada, crie `data/gmail-sender.json` com permissão 600:
 
 ```json
-{"oauth_email":"CONTA_GOOGLE_AUTENTICADA","sender":"contato@scarasoft.com.br","alias_verified":true,"domain_dns_checked":true}
+{"oauth_email":"scarasoftbauru@gmail.com","sender":"scarasoftbauru@gmail.com"}
 ```
 
-`gmail.send` não permite consultar a lista de aliases nem o perfil Gmail. O backend compara a identidade verificada pelo endpoint OAuth UserInfo com `oauth_email` e exige essa confirmação local do alias. Se qualquer etapa faltar, o envio live permanece desabilitado.
+`gmail.send` não permite consultar o perfil Gmail. O backend compara a identidade verificada pelo endpoint OAuth UserInfo com o remetente aprovado. Se qualquer etapa faltar, o envio live permanece desabilitado.
 
 ## Autorização de um lote
 
@@ -37,7 +39,7 @@ Prepare e revise as mensagens. Formulários comerciais elegíveis continuam tend
   "approved_at": "2026-10-12T12:00:00Z",
   "batch_id": "batch-ID_REAL",
   "job_ids": ["job-ID_APROVADO"],
-  "sender": "contato@scarasoft.com.br",
+  "sender": "scarasoftbauru@gmail.com",
   "max_contacts": 1,
   "daily_limit": 5
 }
