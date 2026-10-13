@@ -16,6 +16,7 @@ import uuid
 import mimetypes
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from quick_site import create as create_quick_site, TEMPLATES, profile, validate as validate_quick_site
+import commercial
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = Path(os.environ.get('REVAMP_DB', ROOT / 'data' / 'revamp.sqlite3'))
@@ -54,7 +55,7 @@ def identity(value):
         return 'phone:' + raw
     raise ValueError('Identity must use domain:, phone: or email:')
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def migrate(con, hook=None):
@@ -62,10 +63,11 @@ def migrate(con, hook=None):
     version = con.execute('PRAGMA user_version').fetchone()[0]
     if version > SCHEMA_VERSION:
         raise ValueError('Ledger schema is newer than this application')
-    if version == SCHEMA_VERSION:
+    if version >= 2:
         domain_column = next(row for row in con.execute('PRAGMA table_info(jobs)') if row['name'] == 'domain')
         if domain_column['notnull']:
             raise ValueError('Ledger schema version and jobs.domain disagree')
+    if version == SCHEMA_VERSION:
         return
     # SQLite cannot change foreign_keys inside a transaction. Turn it off only
     # for the table rebuild; every exit path closes or restores this connection.
@@ -75,7 +77,7 @@ def migrate(con, hook=None):
         version = con.execute('PRAGMA user_version').fetchone()[0]
         if version > SCHEMA_VERSION:
             raise ValueError('Ledger schema is newer than this application')
-        if version < SCHEMA_VERSION:
+        if version < 2:
             if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='jobs_new'").fetchone():
                 raise ValueError('Unexpected jobs_new table; inspect ledger before migration')
             con.execute("""CREATE TABLE IF NOT EXISTS batches(id TEXT PRIMARY KEY, industry TEXT NOT NULL, city TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, requested_count INTEGER NOT NULL DEFAULT 3)""")
@@ -107,8 +109,12 @@ def migrate(con, hook=None):
                 raise ValueError('Ledger foreign key check failed')
             if con.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
                 raise ValueError('Ledger integrity check failed')
-            con.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
             if hook: hook('before_commit')
+        con.execute('''CREATE TABLE IF NOT EXISTS commercial_attempts(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL REFERENCES jobs(id),
+            channel TEXT NOT NULL, status TEXT NOT NULL, message TEXT NOT NULL,
+            evidence TEXT NOT NULL, created_at TEXT NOT NULL)''')
+        con.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
         con.execute('COMMIT')
     except BaseException:
         if con.in_transaction: con.execute('ROLLBACK')
@@ -201,6 +207,8 @@ def snapshot():
     with connect() as c:
         out = {table: [dict(r) for r in c.execute('SELECT * FROM ' + table + (' ORDER BY id DESC LIMIT 200' if table == 'events' else ''))] for table in ('batches', 'jobs', 'events', 'workers')}
         for j in out['jobs']: j['data'] = json.loads(j['data'])
+        out['commercial_attempts'] = [dict(r) for r in c.execute('SELECT * FROM commercial_attempts ORDER BY id DESC')]
+        out['legacy_submissions'] = [dict(r) for r in c.execute('SELECT * FROM submissions')]
         for b in out['batches']: b.update(batch_progress(c, b['id']))
         out['settings'] = {'batch_size': 3, 'max_workers': int(c.execute("SELECT value FROM config WHERE key='max_workers'").fetchone()[0])}
         out['templates'] = [{'id': k, 'name': v['name']} for k,v in TEMPLATES.items()]
@@ -249,7 +257,7 @@ def clear_all(reason):
     with connect() as c:
         counts = {table: c.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] for table in ('batches','jobs','identities','events','workers','submissions')}
         # Delete children before their referenced parents. `config` intentionally survives.
-        for table in ('submissions','events','workers','identities','jobs','batches'):
+        for table in ('commercial_attempts','submissions','events','workers','identities','jobs','batches'):
             c.execute(f'DELETE FROM {table}')
         return {'cleared': counts, 'reason': reason}
 
@@ -586,6 +594,8 @@ def contact_begin(jid,worker,message,form_url):
     domain(form_url)
     with connect() as c:
         j=own(c,jid,worker); data=json.loads(j['data'])
+        if j['contact_status'] in ('opted_out','not_interested','uncertain','sent','replied','interested') or c.execute('SELECT 1 FROM commercial_attempts WHERE job_id=?', (jid,)).fetchone():
+            raise ValueError('Commercial history prevents an automatic submission')
         require_outreach_authorization(c, j, message)
         if data.get('outreach_mode') == 'manual':
             raise ValueError('This job is routed to manual outreach; do not submit automatically')
@@ -609,6 +619,7 @@ def contact_simulate(jid, worker, message, form_url):
     domain(form_url)
     with connect() as c:
         j=own(c,jid,worker); data=json.loads(j['data'])
+        if j['contact_status'] == 'opted_out': raise ValueError('Opt-out prevents contact preparation')
         if j['stage']!='ready' or data.get('qa_passed') is not True or data.get('preview_verified') is not True or not j['reason']:
             raise ValueError('Simulation requires a ready, qualified, verified preview')
         qualification=data.get('qualification') or {}
@@ -666,6 +677,7 @@ def manual_outreach(jid, worker, reason, message, email='', phone=''):
     if phone: phone = identity('phone:' + phone).removeprefix('phone:')
     with connect() as c:
         j = own(c, jid, worker)
+        if j['contact_status'] == 'opted_out': raise ValueError('Opt-out prevents contact preparation')
         data = json.loads(j['data'])
         if j['stage'] != 'ready' or data.get('qa_passed') is not True or data.get('preview_verified') is not True or not j['preview_url'].startswith('https://'):
             raise ValueError('Manual outreach requires a ready, QA-passed, verified public website')
@@ -686,7 +698,148 @@ def manual_outreach(jid, worker, reason, message, email='', phone=''):
         event(c, jid, 'Manual outreach required: ' + reason.strip())
         return {'id': jid, 'stage': 'manual', 'contact_status': 'manual_required'}
 
+def prepare_commercial(jid, observation=''):
+    """Prepare copy only. No external request or production transition occurs."""
+    with connect() as c:
+        job = c.execute('SELECT * FROM jobs WHERE id=?', (jid,)).fetchone()
+        if not job: raise ValueError('Unknown job')
+        data = json.loads(job['data'])
+        if data.get('preview_verified') is not True or not job['preview_url'].startswith('https://'):
+            raise ValueError('A verified public preview is required')
+        if job['contact_status'] in ('opted_out','not_interested','uncertain','sent','submitted','replied','interested','attempting'):
+            raise ValueError('Commercial contact is already resolved or requires review')
+        if c.execute('SELECT 1 FROM submissions WHERE job_id=?', (jid,)).fetchone():
+            raise ValueError('Legacy submission exists; review before preparing')
+        latest = c.execute('SELECT status FROM commercial_attempts WHERE job_id=? ORDER BY id DESC LIMIT 1', (jid,)).fetchone()
+        if latest and latest['status'] != 'failed_no_send':
+            raise ValueError('Prior attempt prevents preparation')
+        failed = [row['channel'] for row in c.execute("SELECT channel FROM commercial_attempts WHERE job_id=? AND status='failed_no_send'", (jid,))]
+        channel, destination = commercial.route(data.get('contacts'), failed)
+        if channel == 'no_channel':
+            data['commercial_contact'] = {'channel': channel, 'next_action': 'Pesquisar contato público adequado'}
+            c.execute('UPDATE jobs SET data=?,contact_status=?,updated_at=? WHERE id=?', (json.dumps(data), 'pending', now(), jid))
+            return data['commercial_contact']
+        presence = data.get('presence_status')
+        template = {'sem_site_confirmado': 'primeiro_site', 'site_confirmado': 'redesign', 'site_inoperante': 'site_inoperante'}.get(presence)
+        if not template: raise ValueError('Digital presence is not sufficiently verified')
+        if template == 'site_inoperante':
+            verification = data.get('verification') or {}
+            failure = verification.get('technical_failure') or {}
+            checked = failure.get('checked_at','')
+            try: recent = (dt.datetime.now(dt.timezone.utc).date() - dt.date.fromisoformat(checked)).days in range(0, 15)
+            except ValueError: recent = False
+            if (not recent or not isinstance(failure.get('source'),str) or not failure['source'].startswith(('https://','http://'))
+                    or not isinstance(failure.get('result'),str) or not failure['result'].strip()
+                    or type(failure.get('attempts')) is not int or failure['attempts'] < 2
+                    or not observation.strip()):
+                raise ValueError('Recent technical evidence and a verified observation are required')
+            if observation.strip() != failure['result'].strip():
+                raise ValueError('Observation must match the recorded technical result')
+        batch_row = c.execute('SELECT city FROM batches WHERE id=?', (job['batch_id'],)).fetchone()
+        city = batch_row['city'].split(',')[0].strip()
+        segment = data.get('template')
+        if segment not in commercial.SEARCHES: raise ValueError('Unknown segment')
+        noun, search = commercial.SEARCHES[segment]
+        values = {'empresa': job['name'], 'cidade': city, 'segmento': noun,
+                  'busca_exemplo': search.replace('{cidade}', city), 'preview_url': job['preview_url'],
+                  'observacao_verificada': observation.strip(), 'assinatura': 'scarasoft — Lucas Scaranello',
+                  'email_comercial': os.environ.get('BR_COMMERCIAL_EMAIL','').strip(),
+                  'telefone_comercial': os.environ.get('BR_COMMERCIAL_PHONE','').strip()}
+        variant = 'full' if channel == 'email' else 'short'
+        message = commercial.render(template, variant, values)
+        subject = commercial.render(template, 'subject', values) if channel == 'email' else ''
+        if channel != 'email':
+            message += '\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}'.format(**values)
+        require_commercial_identity(message)
+        prepared = {'channel': channel, 'destination': destination, 'template': template,
+                    'message': message, 'subject': subject, 'prepared_at': now(),
+                    'next_action': 'Revisar e registrar o resultado do contato manual' if channel == 'whatsapp_manual' else 'Revisar antes de qualquer envio'}
+        if channel == 'whatsapp_manual': prepared['whatsapp_url'] = commercial.whatsapp_link(destination, message)
+        data['commercial_contact'] = prepared
+        c.execute('UPDATE jobs SET data=?,contact_status=?,updated_at=? WHERE id=?', (json.dumps(data, ensure_ascii=False), 'prepared', now(), jid))
+        event(c, jid, 'Commercial message prepared; no contact sent.')
+        return prepared
+
+def require_commercial_identity(message):
+    email = os.environ.get('BR_COMMERCIAL_EMAIL','').strip()
+    phone = os.environ.get('BR_COMMERCIAL_PHONE','').strip()
+    if not email or not phone or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+        raise ValueError('Approved commercial email and phone must be configured locally')
+    if any(value not in message for value in ('scarasoft — Lucas Scaranello', email, phone)):
+        raise ValueError('Message lacks approved commercial identity')
+
+def load_commercial_env():
+    """Read only the two approved contact fields for the local dashboard."""
+    try: lines = (ROOT / '.env').read_text().splitlines()
+    except OSError: return
+    for line in lines:
+        match = re.fullmatch(r'\s*(BR_COMMERCIAL_EMAIL|BR_COMMERCIAL_PHONE)\s*=\s*(.*?)\s*', line)
+        if match:
+            value = match.group(2).strip().strip('"\'')
+            if value: os.environ.setdefault(match.group(1), value)
+
+def commercial_proof(proof):
+    if not isinstance(proof, str) or not proof.strip():
+        raise ValueError('A send confirmation reference is required')
+    proof = proof.strip()
+    if proof.startswith(('http://','https://')):
+        evidence_url(proof)
+    elif proof.startswith('runs/'):
+        path = (ROOT / proof).resolve()
+        if not path.is_relative_to((ROOT / 'runs').resolve()) or not path.is_file():
+            raise ValueError('Local send evidence must be an existing file under runs/')
+    elif not re.fullmatch(r'id:[A-Za-z0-9._:-]{8,}', proof):
+        raise ValueError('Use an evidence URL, an existing runs/ file, or id:REFERENCE')
+    return proof
+
+def record_commercial(jid, status, evidence, channel='', proof=''):
+    """Operator records an observed result; opening a link never calls this."""
+    allowed = {'sent','sent_external','uncertain','failed_no_send','replied','interested','not_interested','opted_out'}
+    if status not in allowed or not isinstance(evidence,str) or not evidence.strip():
+        raise ValueError('Status and observed evidence are required')
+    if status in ('sent','sent_external'): proof = commercial_proof(proof)
+    with connect() as c:
+        job = c.execute('SELECT * FROM jobs WHERE id=?', (jid,)).fetchone()
+        if not job: raise ValueError('Unknown job')
+        data = json.loads(job['data'])
+        prepared = data.get('commercial_contact') or {}
+        current = job['contact_status']
+        if current == 'opted_out' or c.execute("SELECT 1 FROM commercial_attempts WHERE job_id=? AND status='opted_out'", (jid,)).fetchone():
+            raise ValueError('Opt-out prevents further contact')
+        prior = c.execute('SELECT status FROM commercial_attempts WHERE job_id=? ORDER BY id DESC LIMIT 1', (jid,)).fetchone()
+        if status in ('sent','uncertain','failed_no_send'):
+            if current != 'prepared' or not prepared.get('message'):
+                raise ValueError('A prepared message is required')
+            if prior and prior['status'] != 'failed_no_send':
+                raise ValueError('Prior attempt prevents duplicate contact')
+        elif status == 'sent_external':
+            if (current not in ('not_sent','pending','prepared','manual_required')
+                    or (prior and prior['status'] != 'failed_no_send')
+                    or c.execute('SELECT 1 FROM submissions WHERE job_id=?', (jid,)).fetchone()):
+                raise ValueError('Prior contact or uncertain result prevents duplicate contact')
+            if channel not in ('form','email','whatsapp_manual'):
+                raise ValueError('The actual external channel is required')
+        elif status in ('replied','interested','not_interested'):
+            if current not in ('sent','submitted','replied','interested','not_interested'):
+                raise ValueError('A confirmed prior contact is required before recording a response')
+            confirmed = (c.execute("SELECT 1 FROM commercial_attempts WHERE job_id=? AND status IN ('sent','sent_external')", (jid,)).fetchone()
+                         or c.execute("SELECT 1 FROM submissions WHERE job_id=? AND status IN ('submitted','sent')", (jid,)).fetchone())
+            if not confirmed:
+                raise ValueError('A recorded send confirmation is required before a response')
+        next_status = {'failed_no_send':'pending','sent_external':'sent'}.get(status,status)
+        recorded_channel = channel if status == 'sent_external' else prepared.get('channel','legacy')
+        recorded_message = '' if status == 'sent_external' else prepared.get('message','')
+        recorded_evidence = evidence.strip() + (' | Comprovante: ' + proof if proof else '')
+        c.execute('INSERT INTO commercial_attempts(job_id,channel,status,message,evidence,created_at) VALUES(?,?,?,?,?,?)',
+                  (jid,recorded_channel,status,recorded_message,recorded_evidence,now()))
+        if status == 'failed_no_send': data.pop('commercial_contact',None)
+        c.execute('UPDATE jobs SET contact_status=?,data=?,updated_at=? WHERE id=?',
+                  (next_status,json.dumps(data,ensure_ascii=False),now(),jid))
+        event(c,jid,'Commercial result recorded: '+status)
+        return {'id':jid,'contact_status':next_status}
+
 def serve(port):
+    load_commercial_env()
     static=(ROOT/'dashboard').resolve()
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args): pass
@@ -739,12 +892,16 @@ def serve(port):
             origin=self.headers.get('Origin')
             if not self.valid_host() or origin not in (f'http://127.0.0.1:{self.server.server_port}',f'http://localhost:{self.server.server_port}'):
                 return self.send(403,{'error':'Same-origin browser request required'})
-            if self.path not in ('/api/batches','/api/sites'): return self.send(404,{'error':'Not found'})
+            if self.path not in ('/api/batches','/api/sites','/api/commercial/prepare','/api/commercial/record'): return self.send(404,{'error':'Not found'})
             try:
                 size=int(self.headers.get('Content-Length','0'))
                 if size<1 or size>8192 or self.headers.get_content_type()!='application/json': raise ValueError('JSON body required (8 KB maximum)')
                 data=json.loads(self.rfile.read(size))
-                if self.path=='/api/sites':
+                if self.path=='/api/commercial/prepare':
+                    self.send(200,prepare_commercial(data.get('job_id'),data.get('observation','')))
+                elif self.path=='/api/commercial/record':
+                    self.send(200,record_commercial(data.get('job_id'),data.get('status'),data.get('evidence',''),data.get('channel',''),data.get('proof','')))
+                elif self.path=='/api/sites':
                     result=create_quick_site(data)
                     result['preview_url']='/preview/'+result['id']+'/'
                     self.send(201,result)
@@ -771,6 +928,8 @@ def main():
     s=sub.add_parser('resume-simulated'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True)
     s=sub.add_parser('contact-finish'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--status',choices=['submitted','sent','uncertain','blocked'],required=True); s.add_argument('--evidence',required=True)
     s=sub.add_parser('manual-outreach'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--reason',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--email',default=''); s.add_argument('--phone',default='')
+    s=sub.add_parser('commercial-prepare'); s.add_argument('--job',required=True); s.add_argument('--observation',default='')
+    s=sub.add_parser('commercial-record'); s.add_argument('--job',required=True); s.add_argument('--status',choices=['sent','sent_external','uncertain','failed_no_send','replied','interested','not_interested','opted_out'],required=True); s.add_argument('--evidence',required=True); s.add_argument('--channel',choices=['form','email','whatsapp_manual'],default=''); s.add_argument('--proof',default='')
     s=sub.add_parser('recover'); s.add_argument('--job',required=True); s.add_argument('--reason',required=True)
     s=sub.add_parser('batch-status'); s.add_argument('--batch',required=True); s.add_argument('--status',choices=['running','complete','blocked','exhausted'],required=True)
     s=sub.add_parser('cancel-batch'); s.add_argument('--batch',required=True); s.add_argument('--reason',required=True)
@@ -790,6 +949,8 @@ def main():
         elif a.cmd=='resume-simulated': result=resume_simulated(a.job,a.worker)
         elif a.cmd=='contact-finish': result=contact_finish(a.job,a.worker,a.status,a.evidence)
         elif a.cmd=='manual-outreach': result=manual_outreach(a.job,a.worker,a.reason,a.message_file.read_text(),a.email,a.phone)
+        elif a.cmd=='commercial-prepare': result=prepare_commercial(a.job,a.observation)
+        elif a.cmd=='commercial-record': result=record_commercial(a.job,a.status,a.evidence,a.channel,a.proof)
         elif a.cmd=='capacity':
             with connect() as c: c.execute("UPDATE config SET value=? WHERE key='max_workers'",(str(a.count),))
             result={'max_workers':a.count}

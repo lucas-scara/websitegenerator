@@ -20,13 +20,17 @@ test('telefone válido gera discagem, formatação e cópia; inválido fica sem 
 });
 
 test('WhatsApp distingue confirmado, presumido, indisponível e não verificado', () => {
-  const phone = { value: '(14) 3222-1234', source: 'https://example.org/ficha' };
-  const confirmed = render({ phone, whatsapp: { status: 'confirmado', value: '+55 (14) 98888-7777' } });
+  const phone = { value: '(14) 3222-1234', source: 'https://example.org/ficha', checked_at: '2026-10-11' };
+  const confirmed = render({ phone, whatsapp: { status: 'confirmado', value: '+55 (14) 98888-7777', source: 'https://example.org/whatsapp', checked_at: '2026-10-11' } });
   assert.match(confirmed, /Confirmado · \+55 \(14\) 98888-7777 · <a href="https:\/\/wa.me\/5514988887777"/);
   assert.doesNotMatch(confirmed, /wa.me\/551432221234/);
   const presumed = render({ phone, whatsapp: { status: 'presumido' } });
   assert.match(presumed, /Presumido · telefone público · \(14\) 3222-1234 · <a href="https:\/\/wa.me\/551432221234"/);
   assert.match(presumed, /example.org ↗/);
+  assert.doesNotMatch(render({ phone: { value: phone.value }, whatsapp: { status: 'presumido' } }), /wa.me/);
+  assert.doesNotMatch(render({ phone: { ...phone, source: 'http://localhost/ficha' }, whatsapp: { status: 'presumido' } }), /wa.me/);
+  assert.doesNotMatch(render({ phone: { ...phone, checked_at: '2999-01-01' }, whatsapp: { status: 'presumido' } }), /wa.me/);
+  assert.doesNotMatch(render({ phone, whatsapp: { status: 'confirmado', value: '+5514988887777' } }), /wa.me/);
   for (const status of ['nao_utiliza', 'nao_verificado']) assert.doesNotMatch(render({ phone, whatsapp: { status } }), /wa.me/);
   assert.match(render({ phone, whatsapp: { status: 'confirmado', value: 'abc' } }), /Número indisponível/);
   assert.doesNotMatch(render({ phone, whatsapp: { status: 'presumido' }, phone: { value: 'abc' } }), /wa.me/);
@@ -91,4 +95,20 @@ test('layout limita largura do modal e quebra conteúdo no mobile', () => {
   assert.match(css, /\.contact-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(css, /\.contact-main\{[^}]*overflow-wrap:anywhere/);
   assert.match(css, /@media\(max-width:650px\)\{dialog\{padding:18px\}\.contact-grid\{grid-template-columns:minmax\(0,1fr\)\}\}/);
+});
+
+test('produção publicada e contato comercial permanecem separados', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nthis.commercialSection = commercialSection; this.productionCategory = productionCategory; this.production = production;', display);
+  const job = { id: 'job-1', stage: 'ready', contact_status: 'prepared', preview_url: 'https://preview.example',
+    data: { preview_verified: true, commercial_contact: { channel: 'whatsapp_manual', template: 'redesign', message: 'Proposta', whatsapp_url: 'https://wa.me/5514999999999?text=Proposta' } } };
+  const prepared = display.commercialSection(job);
+  assert.match(prepared, /Contato comercial/);
+  assert.match(prepared, /Contato externo comprovado/);
+  assert.doesNotMatch(prepared, /<option value="replied">/);
+  assert.match(prepared, /abrir não registra envio/);
+  job.contact_status = 'sent';
+  assert.equal(display.production(job), 'Prévia verificada');
+  assert.equal(display.productionCategory(job), 'ready');
+  assert.match(display.commercialSection(job), /<option value="replied">/);
 });
