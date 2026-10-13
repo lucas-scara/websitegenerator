@@ -19,11 +19,13 @@ class FakeGmail:
         self.error = error
         self.account = account
         self.calls = 0
+        self.last_send = None
     def verify_identity(self, expected, sender):
         if self.account != expected:
             raise gmail.PreSendError('Authenticated Google account does not match authorized mailbox')
-    def send(self, recipient, sender, subject, body):
+    def send(self, recipient, sender, subject, body, preview_url=None, **kwargs):
         self.calls += 1
+        self.last_send = (recipient, sender, subject, body, preview_url, kwargs)
         if self.error: raise self.error
         return self.response
 
@@ -76,6 +78,7 @@ class GmailTests(unittest.TestCase):
         result = gmail.simulate(control.gmail_ledger(),self.job)
         self.assertEqual(result['mode'],'dry_run')
         self.assertTrue(result['would_send'])
+        self.assertEqual(result['preview_url'], 'https://preview.example')
         self.assertEqual(control.snapshot()['commercial_attempts'],[])
         with self.assertRaisesRegex(ValueError,'disabled'): self.dispatch()
         self.assertEqual(control.snapshot()['commercial_attempts'],[])
@@ -150,12 +153,57 @@ class GmailTests(unittest.TestCase):
                 self_outer.assertIsNone(msg['Cc'])
                 self_outer.assertIsNone(msg['Bcc'])
                 self_outer.assertEqual(len(list(msg.iter_attachments())),0)
-                self_outer.assertIn('prévia',msg.get_payload(decode=True).decode('utf-8'))
+                self_outer.assertIn('prévia',msg.get_content())
                 return Response()
         self_outer = self
         client = gmail.GmailClient.__new__(gmail.GmailClient)
         client.session = Session()
         self.assertEqual(client.send('empresa@example.org','scarasoftbauru@gmail.com','Proposta','Veja a prévia')['id'],'gmail12345678')
+    def test_named_preview_link_has_safe_html_and_plain_fallback(self):
+        prepared = self.prepare()
+        self.assertIn('Ver a prévia do site', prepared['message'])
+        self.assertNotIn('https://preview.example', prepared['message'])
+        class Response:
+            status_code = 200
+            def json(self): return {'id':'gmail12345678'}
+        class Session:
+            def post(self, url, json, timeout):
+                msg = message_from_bytes(base64.urlsafe_b64decode(json['raw'] + '==='), policy=policy.default)
+                self_outer.assertTrue(msg.is_multipart())
+                plain, html = list(msg.iter_parts())
+                self_outer.assertIn('Ver a prévia do site: https://preview.example',plain.get_content())
+                self_outer.assertIn('<a href="https://preview.example">Ver a prévia do site</a>',html.get_content())
+                self_outer.assertNotIn('https://preview.example</p>',html.get_content())
+                self_outer.assertIsNone(msg['Cc'])
+                self_outer.assertIsNone(msg['Bcc'])
+                return Response()
+        self_outer = self
+        client = gmail.GmailClient.__new__(gmail.GmailClient)
+        client.session = Session()
+        client.send('empresa@example.org','scarasoftbauru@gmail.com',prepared['subject'],
+                    prepared['message'],'https://preview.example')
+    def test_followup_mime_replies_in_original_gmail_thread(self):
+        class Response:
+            status_code = 200
+            def json(self): return {'id':'gmail12345678','threadId':'thread12345678'}
+        class Session:
+            def post(self, url, json, timeout):
+                self_outer.assertEqual(json['threadId'], 'thread12345678')
+                msg = message_from_bytes(base64.urlsafe_b64decode(json['raw'] + '==='), policy=policy.default)
+                self_outer.assertEqual(msg['Message-ID'], '<followup@scarasoft.com.br>')
+                self_outer.assertEqual(msg['In-Reply-To'], '<first@scarasoft.com.br>')
+                self_outer.assertEqual(msg['References'], '<first@scarasoft.com.br>')
+                self_outer.assertEqual(msg['To'], 'empresa@example.org')
+                self_outer.assertIsNone(msg['Cc'])
+                self_outer.assertIsNone(msg['Bcc'])
+                return Response()
+        self_outer = self
+        client = gmail.GmailClient.__new__(gmail.GmailClient)
+        client.session = Session()
+        client.send('empresa@example.org','scarasoftbauru@gmail.com','Assunto',
+                    gmail.followup_message('Empresa Um', 1),
+                    message_id='<followup@scarasoft.com.br>', thread_id='thread12345678',
+                    in_reply_to='<first@scarasoft.com.br>', references='<first@scarasoft.com.br>')
     def test_gmail_quota_rejection_is_definite_and_server_error_uncertain(self):
         class Response:
             def __init__(self, code): self.status_code = code
@@ -182,12 +230,69 @@ class GmailTests(unittest.TestCase):
     def test_optout_recorded_during_send_is_preserved(self):
         self.prepare(); self.authorize()
         class OptOutDuringSend(FakeGmail):
-            def send(self, recipient, sender, subject, body):
+            def send(self, recipient, sender, subject, body, preview_url=None, **kwargs):
                 control.record_commercial(self_outer.job,'opted_out','Pedido recebido durante a tentativa')
-                return super().send(recipient,sender,subject,body)
+                return super().send(recipient,sender,subject,body,preview_url,**kwargs)
         self_outer = self
         self.assertEqual(self.dispatch(client=OptOutDuringSend())['status'],'sent')
         self.assertEqual(control.snapshot()['jobs'][0]['contact_status'],'opted_out')
+    def age_first_send(self, days):
+        at = (control.dt.datetime.now(control.dt.timezone.utc) - control.dt.timedelta(days=days)).isoformat(timespec='seconds')
+        with control.connect() as c:
+            c.execute("UPDATE commercial_attempts SET created_at=? WHERE job_id=? AND source='gmail_api' AND touch=0", (at,self.job))
+    def test_followup_day4_and_day10_same_thread(self):
+        self.prepare(); self.authorize()
+        self.dispatch()
+        self.age_first_send(11)
+        plan = control.snapshot()['gmail_followups'][self.job]
+        self.assertEqual(plan['next_touch'],1)
+        self.assertTrue(plan['due'])
+        self.assertIn('Empresa Um',plan['message'])
+        fake = FakeGmail()
+        result = gmail.dispatch(control.gmail_ledger(),self.job,fake,touch=1)
+        self.assertEqual(result['status'],'sent')
+        self.assertEqual(fake.last_send[-1]['thread_id'],'thread12345678')
+        first = next(r for r in control.snapshot()['commercial_attempts'] if r['touch'] == 0)
+        self.assertEqual(fake.last_send[-1]['in_reply_to'],first['rfc_message_id'])
+        self.assertEqual(control.snapshot()['gmail_followups'][self.job]['next_touch'],2)
+        final = gmail.dispatch(control.gmail_ledger(),self.job,FakeGmail(),touch=2)
+        self.assertEqual(final['status'],'sent')
+        self.assertIsNone(control.snapshot()['gmail_followups'][self.job]['next_touch'])
+        self.assertEqual(control.snapshot()['jobs'][0]['contact_status'],'sent')
+    def test_followup_not_due_or_after_response_and_no_duplicates(self):
+        self.prepare(); self.authorize()
+        self.dispatch()
+        with self.assertRaisesRegex(ValueError,'not due'):
+            gmail.dispatch(control.gmail_ledger(),self.job,FakeGmail(),touch=1)
+        self.age_first_send(5)
+        control.record_commercial(self.job,'replied','Empresa respondeu')
+        with self.assertRaisesRegex(ValueError,'blocked'):
+            gmail.dispatch(control.gmail_ledger(),self.job,FakeGmail(),touch=1)
+    def test_followup_daily_limit_and_concurrent_reservation(self):
+        self.prepare(); self.authorize()
+        self.dispatch(); self.age_first_send(5)
+        other = self.new_job('Empresa Dois','second@example.org')
+        self.prepare(other); self.authorize(jobs=[self.job,other],daily_limit=1)
+        self.dispatch(other)
+        with self.assertRaisesRegex(ValueError,'daily'):
+            gmail.dispatch(control.gmail_ledger(),self.job,FakeGmail(),touch=1)
+        self.authorize(jobs=[self.job,other],daily_limit=5)
+        results = []
+        def worker():
+            try: results.append(gmail.dispatch(control.gmail_ledger(),self.job,FakeGmail(),touch=1))
+            except ValueError: results.append('blocked')
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for thread in threads: thread.start()
+        for thread in threads: thread.join()
+        self.assertEqual(sum(isinstance(r,dict) for r in results),1)
+    def test_legacy_initial_send_without_rfc_id_requires_manual_reply(self):
+        self.prepare(); self.authorize()
+        self.dispatch(); self.age_first_send(5)
+        with control.connect() as c:
+            c.execute("UPDATE commercial_attempts SET rfc_message_id=NULL WHERE job_id=? AND source='gmail_api' AND touch=0", (self.job,))
+        plan = control.snapshot()['gmail_followups'][self.job]
+        self.assertIsNone(plan['next_touch'])
+        self.assertIn('manualmente',plan['reason'])
     def test_concurrent_reservation_and_history_preserved(self):
         self.prepare(); self.authorize()
         with control.connect() as c:

@@ -4,7 +4,7 @@ O envio usa a mensagem e o canal preparados em `commercial-prepare`. O estado de
 
 ## Configuração local
 
-1. Faça backup de `data/revamp.sqlite3` antes de iniciar esta versão; a migração 4 → 5 adiciona campos e um índice a `commercial_attempts`, preservando `submissions`, jobs e tentativas anteriores.
+1. Faça backup de `data/revamp.sqlite3` antes de iniciar esta versão; as migrações 4 → 5 → 6 adicionam campos e índices a `commercial_attempts`, preservando `submissions`, jobs e tentativas anteriores.
 2. Instale `python3 -m pip install -r requirements-gmail.txt` no ambiente local. `google-auth` valida e renova credenciais OAuth; `google-auth-oauthlib` abre o fluxo OAuth de aplicativo instalado. O HTTP usa o transporte do `google-auth` e o módulo `email` da biblioteca padrão. Não é necessário cliente de descoberta do Google.
 3. No Google Cloud, habilite a Gmail API, configure a tela de consentimento OAuth e crie um cliente OAuth do tipo **Desktop app**. Guarde o JSON baixado em `data/gmail-oauth-client.json` e rode `chmod 600 data/gmail-oauth-client.json`. Configure o usuário de teste quando o app estiver em modo de teste. O consentimento pede `gmail.send` para envio e `openid email` para confirmar a identidade da conta. Nenhum escopo de leitura do Gmail é solicitado.
 4. Execute `python3 tools/control.py gmail-auth` localmente, autentique a conta Google aprovada e confirme que `data/gmail-token.json` tem permissão 600. Esse comando **não** autoriza envios. Tokens e segredos ficam apenas em `data/`, ignorado pelo Git.
@@ -47,7 +47,18 @@ Prepare e revise as mensagens. Formulários comerciais elegíveis continuam tend
 
 `job_ids` é a seleção explícita de empresas. `max_contacts` limita tentativas do lote, incluindo falhas anteriores; `daily_limit` limita tentativas em UTC em todos os lotes e vale 5 se omitido. Para simular ou desabilitar, altere `mode` para `dry_run` ou remova o arquivo. O dashboard e a prospecção não criam nem alteram essa autorização. Editar um arquivo local protegido é a aprovação operacional; não há botão no dashboard para aprovar lote.
 
-Execute `python3 tools/control.py gmail-simulate --job ID` para validar sem reservar tentativa. Depois de confirmar os campos no dashboard, use **Enviar via Gmail** ou `python3 tools/control.py gmail-send --job ID`. Ambos aplicam as mesmas verificações no backend. Cada mensagem tem um destinatário, corpo UTF-8 e não contém CC, BCC ou anexos. A mensagem preparada inclui a identidade comercial e instrução de opt-out.
+Execute `python3 tools/control.py gmail-simulate --job ID` para validar sem reservar tentativa. Depois de confirmar os campos no dashboard, use **Enviar via Gmail** ou `python3 tools/control.py gmail-send --job ID`. Ambos aplicam as mesmas verificações no backend. Cada mensagem tem um destinatário, corpo UTF-8 e não contém CC, BCC ou anexos. A mensagem preparada inclui a identidade comercial e instrução de opt-out. O e-mail inicial tem versão HTML com o texto clicável **Ver a prévia do site** e versão texto simples com a URL explícita como fallback para leitores sem HTML; o dashboard mostra apenas o texto do link e oferece a prévia separadamente.
+
+## Acompanhamento
+
+O dashboard mostra a data do primeiro envio confirmado e os marcos de **dia 4** e **dia 10**. A data é calculada em UTC a partir da tentativa inicial. Não existe agendamento, envio automático nem notificação externa. Quando o dia chega, o operador revisa a mensagem e aciona **Enviar follow-up na mesma conversa**. O backend exige a mesma autorização local, empresa selecionada, limite diário, ausência de resposta/recusa e confirmação da etapa anterior. O máximo de contatos do lote conta empresas no primeiro envio; o limite diário conta todos os envios, inclusive follow-ups.
+
+```sh
+python3 tools/control.py gmail-followup --job ID --touch 1  # dia 4
+python3 tools/control.py gmail-followup --job ID --touch 2  # dia 10
+```
+
+O primeiro envio armazena um `Message-ID` RFC, além de `gmail_message_id` e `gmail_thread_id`. Os follow-ups usam o mesmo assunto, `threadId`, `In-Reply-To` e `References`; se o Gmail confirmar outra conversa, o próximo contato fica bloqueado para revisão manual. Envios anteriores a esta versão sem `Message-ID` RFC não podem ser respondidos automaticamente na mesma conversa com o escopo `gmail.send`; faça o acompanhamento manualmente no Gmail. Resposta, interesse, falta de interesse e opt-out registrados no histórico encerram a sequência. O sistema não lê respostas automaticamente, pois isso exigiria escopo adicional de leitura; registre-as no dashboard.
 
 ## Verificação e reconciliação
 
@@ -56,7 +67,7 @@ Consulte `python3 tools/control.py state` e o histórico comercial no dashboard.
 Após investigar uma tentativa `uncertain` ou `attempting` na conta Gmail, reconcilie somente com evidência explícita:
 
 ```sh
-python3 tools/control.py gmail-reconcile --attempt ID --status sent --message-id ID_GMAIL --evidence 'Confirmação observada na conta Gmail em data/hora'
+python3 tools/control.py gmail-reconcile --attempt ID --status sent --message-id ID_GMAIL --thread-id THREAD_GMAIL --evidence 'Confirmação observada na conta Gmail em data/hora'
 python3 tools/control.py gmail-reconcile --attempt ID --status failed_no_send --evidence 'Não envio confirmado por investigação documentada'
 ```
 
