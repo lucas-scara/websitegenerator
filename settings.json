@@ -4,6 +4,7 @@
   "template_edit_policy": "business-details-and-theme-only",
   "dashboard_port": 4310,
   "batch_size": 3,
+  "max_concurrent_businesses": 4,
   "requested_workers": 5,
   "vercel_scope": "lucasscaranello-3315s-projects",
   "vercel_cli": [
@@ -33,9 +34,15 @@
     "complete_after_submit": true,
     "message_mode": "fixed"
   },
-  "worker_model": "gpt-5.6-terra",
+  "worker_model": "gpt-6-luna",
   "worker_reasoning_effort": "low",
   "visible_worker_browsers": true,
+  "deployment": {
+    "max_concurrent_deployments": 1
+  },
+  "external_operations": {
+    "max_concurrent_calls": 2
+  },
   "build_mode": "quick-template",
   "default_template": "electrician",
   "templates": {

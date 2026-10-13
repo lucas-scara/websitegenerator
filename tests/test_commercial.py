@@ -175,7 +175,7 @@ class CommercialTests(unittest.TestCase):
             con.execute('DROP TABLE commercial_attempts')
             con.execute('PRAGMA user_version=2')
         with control.connect() as con:
-            self.assertEqual(con.execute('PRAGMA user_version').fetchone()[0],3)
+            self.assertEqual(con.execute('PRAGMA user_version').fetchone()[0],control.SCHEMA_VERSION)
             self.assertIsNotNone(con.execute('SELECT id FROM jobs WHERE id=?',(jid,)).fetchone())
             self.assertEqual(con.execute('PRAGMA foreign_key_check').fetchall(),[])
 

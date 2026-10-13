@@ -1,6 +1,6 @@
 name = "qualification"
 description = "Classificação comercial fundamentada A/B/C/D."
-model = "gpt-6-sol"
+model = "gpt-6-luna"
 model_reasoning_effort = "medium"
 developer_instructions = """
 Leia apenas evidências verificadas e o trecho pertinente de PROSPECCAO.md para o job.

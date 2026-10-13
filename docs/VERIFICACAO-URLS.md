@@ -14,7 +14,7 @@ python3 tools/check_urls.py \
 
 O CSV de entrada não é sobrescrito. As colunas originais são mantidas e a classificação nova fica em `status_url` e `encaminhamento`. Por padrão, o programa reconhece `empresa` e `site_identificado`, além de nomes comuns como `nome_empresa`, `business_name`, `url_candidata` e `website`. Use `--name-column`, `--url-column` e, se necessário, `--id-column` para outros cabeçalhos. Uma linha sem URL recebe `sem_url` sem acesso à rede.
 
-Os limites padrão são 8 segundos por tentativa, 5 sondagens simultâneas, uma repetição apenas para falhas transitórias, 4 redirecionamentos e 256 KiB de HTML por resposta. `--timeout`, `--workers`, `--retries`, `--redirects` e `--byte-limit` permitem reduzi-los. O programa reaproveita resultados acessíveis do mesmo CSV de saída por até 24 horas para a mesma URL e empresa; `--reuse-hours 0` força nova verificação. O campo `reutilizado` distingue esse caso. Falhas são verificadas de novo.
+Os limites padrão são 8 segundos por tentativa, 2 sondagens simultâneas, uma repetição apenas para falhas transitórias, 4 redirecionamentos e 256 KiB de HTML por resposta. `--timeout`, `--workers`, `--retries`, `--redirects` e `--byte-limit` ajustam os limites locais. Em verificações de empresas distintas em paralelo, respeite as reservas de operações externas do ledger; o limite deste comando é por processo. O programa reaproveita resultados acessíveis do mesmo CSV de saída por até 24 horas para a mesma URL e empresa; `--reuse-hours 0` força nova verificação. O campo `reutilizado` distingue esse caso. Falhas são verificadas de novo.
 
 ## Caminho A — URL encontrada
 

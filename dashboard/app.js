@@ -1,6 +1,6 @@
 'use strict';
 const $ = (selector) => document.querySelector(selector);
-const state = { batches: [], jobs: [], events: [], workers: [], templates: [], commercial_attempts: [], legacy_submissions: [], settings: { batch_size: 3, max_workers: 3 } };
+const state = { batches: [], jobs: [], events: [], workers: [], operations: [], stage_runs: [], templates: [], commercial_attempts: [], legacy_submissions: [], settings: { batch_size: 3, max_workers: 3 } };
 let batchFilter = 'all', stageFilter = 'all', selectedJob = null, previousSignature = '', connected = false;
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const STAGES = { queued: 'Na fila', reviewing: 'Em análise', extracting: 'Coletando dados', building: 'Gerando', checking: 'Verificando', deploying: 'Publicando', ready: 'Prévia pronta', contacting: 'Tentativa de contato', complete: 'Contato efetuado', sent: 'Enviado', sent_external: 'Contato externo comprovado', uncertain: 'Resultado incerto', blocked: 'Bloqueado', skipped: 'Ignorado', manual: 'Contato manual', simulated: 'Simulado', pending: 'Pendente', prepared: 'Preparado', replied: 'Respondeu', interested: 'Interessado', not_interested: 'Sem interesse', opted_out: 'Não contatar', failed_no_send: 'Falha sem envio', whatsapp_manual: 'WhatsApp manual', no_channel: 'Sem canal', form: 'Formulário', email: 'E-mail', not_sent: 'Não enviado', attempting: 'Tentativa reservada', submitted: 'Enviado', manual_required: 'Contato manual necessário' };
@@ -112,6 +112,26 @@ function productionCategory(job) {
   if (['blocked', 'skipped'].includes(job.stage)) return 'attention';
   return 'working';
 }
+function operationSection(job) {
+  const items = state.operations.filter(item => item.job_id === job.id);
+  const stages = state.stage_runs.filter(item => item.job_id === job.id);
+  if (!items.length && !stages.length) return '';
+  const usage = item => {
+    try {
+      const counts = JSON.parse(item.usage_json || '{}');
+      if (Number.isInteger(counts.input_tokens) && Number.isInteger(counts.output_tokens))
+        return `${counts.input_tokens} entrada / ${counts.output_tokens} saída`;
+    } catch (_) { /* Legacy or unavailable usage. */ }
+    return 'indisponíveis';
+  };
+  const rows = items.map(item => {
+    const duration = Number.isFinite(Number(item.duration_seconds)) && item.duration_seconds !== null ? `${Number(item.duration_seconds).toFixed(1)} s` : 'indisponível';
+    const remote = safeURL(item.remote_url);
+    return `<li>${escapeHTML(item.kind)} · ${escapeHTML(item.status)} · ${escapeHTML(item.executor || 'indisponível')} / ${escapeHTML(item.model || 'indisponível')} · ${escapeHTML(item.attempts)} tentativa(s) · ${duration} · tokens: ${escapeHTML(usage(item))}${item.failure ? ` · ${escapeHTML(item.failure)}` : ''}${item.artifact ? ` · Artefato: ${escapeHTML(item.artifact)}` : ''}${item.remote_id ? ` · Deploy: ${escapeHTML(item.remote_id)}` : ''}${remote ? ` · <a href="${escapeHTML(remote)}" target="_blank" rel="noopener noreferrer">Abrir prévia ↗</a>` : ''}</li>`;
+  });
+  const stageRows = stages.map(item => `<li>${escapeHTML(label(item.stage))} · ${escapeHTML(item.status)} · ${escapeHTML(item.executor || 'indisponível')} / ${escapeHTML(item.model || 'indisponível')} / ${escapeHTML(item.effort || 'indisponível')} · tentativa ${escapeHTML(item.attempt)} · ${item.duration_seconds === null ? 'duração indisponível' : `${Number(item.duration_seconds).toFixed(1)} s`} · tokens: ${escapeHTML(usage(item))}${item.failure ? ` · ${escapeHTML(item.failure)}` : ''}</li>`);
+  return `<section class="dialog-section"><div class="meta-label">Etapas desta empresa</div><ol class="timeline">${stageRows.join('')}</ol><div class="meta-label">Operações e artefatos</div><ol class="timeline">${rows.join('')}</ol><p>Custo: indisponível sem fonte confiável.</p></section>`;
+}
 function category(job) {
   if (isManual(job)) return 'manual';
   if (job.stage === 'simulated') return 'simulated';
@@ -184,14 +204,14 @@ function renderDialog() {
   if (!job) return;
   const original = safeURL(job.url), preview = safeURL(job.preview_url);
   const events = state.events.filter(event => String(event.job_id) === String(job.id)).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  $('#dialog-content').innerHTML = `<h2 id="dialog-title">${escapeHTML(job.name)}</h2><span class="stage ${productionCategory(job)}">${escapeHTML(production(job))}</span><div class="dialog-links">${original ? `<a href="${escapeHTML(original)}" target="_blank" rel="noopener noreferrer">Original ↗</a>` : ''}${preview ? `<a class="preview" href="${escapeHTML(preview)}" target="_blank" rel="noopener noreferrer">Prévia ↗</a>` : ''}</div><section class="dialog-section"><div class="meta-label">Oportunidade</div><p>${escapeHTML(job.data?.commercial_category || 'Pendente')} · ${escapeHTML(job.data?.opportunity_type || 'Não definido')}</p><p>${escapeHTML(job.data?.commercial_reason || '')}</p><div class="meta-label">Produção</div><p>${escapeHTML(production(job))} · ${escapeHTML(job.data?.presence_status || 'Presença não verificada')}</p></section>${renderContacts(job.data?.contacts)}${commercialSection(job)}${manualOutreach(job)}${contactSimulation(job)}<section class="dialog-section"><div class="meta-label">Andamento</div><p>${escapeHTML(job.detail || 'Aguardando atualização do coordenador.')}</p><div class="meta-label">Trabalhador · atualização</div><p>${escapeHTML(job.worker || 'Não atribuído')} / ${escapeHTML(time(job.updated_at))}</p></section>${job.reason ? `<section class="dialog-section"><div class="meta-label">Motivo</div><p>${escapeHTML(job.reason)}</p></section>` : ''}<section class="dialog-section"><div class="meta-label">Atividade</div>${events.length ? `<ol class="timeline">${events.map(event => `<li>${escapeHTML(event.message)}<time class="timeline-time">${escapeHTML(time(event.created_at))}</time></li>`).join('')}</ol>` : '<p>Nenhuma atividade registrada.</p>'}</section>`;
+  $('#dialog-content').innerHTML = `<h2 id="dialog-title">${escapeHTML(job.name)}</h2><span class="stage ${productionCategory(job)}">${escapeHTML(production(job))}</span><div class="dialog-links">${original ? `<a href="${escapeHTML(original)}" target="_blank" rel="noopener noreferrer">Original ↗</a>` : ''}${preview ? `<a class="preview" href="${escapeHTML(preview)}" target="_blank" rel="noopener noreferrer">Prévia ↗</a>` : ''}</div><section class="dialog-section"><div class="meta-label">Oportunidade</div><p>${escapeHTML(job.data?.commercial_category || 'Pendente')} · ${escapeHTML(job.data?.opportunity_type || 'Não definido')}</p><p>${escapeHTML(job.data?.commercial_reason || '')}</p><div class="meta-label">Produção</div><p>${escapeHTML(production(job))} · ${escapeHTML(job.data?.presence_status || 'Presença não verificada')}</p></section>${renderContacts(job.data?.contacts)}${commercialSection(job)}${manualOutreach(job)}${contactSimulation(job)}${operationSection(job)}<section class="dialog-section"><div class="meta-label">Andamento</div><p>${escapeHTML(job.detail || 'Aguardando atualização do coordenador.')}</p><div class="meta-label">Trabalhador · atualização</div><p>${escapeHTML(job.worker || 'Não atribuído')} / ${escapeHTML(time(job.updated_at))}</p></section>${job.reason ? `<section class="dialog-section"><div class="meta-label">Motivo</div><p>${escapeHTML(job.reason)}</p></section>` : ''}<section class="dialog-section"><div class="meta-label">Atividade</div>${events.length ? `<ol class="timeline">${events.map(event => `<li>${escapeHTML(event.message)}<time class="timeline-time">${escapeHTML(time(event.created_at))}</time></li>`).join('')}</ol>` : '<p>Nenhuma atividade registrada.</p>'}</section>`;
 }
 async function poll() {
   try {
     const response = await fetch('/api/state', { cache: 'no-store' });
     if (!response.ok) throw new Error(`Server returned ${response.status}`);
     const data = await response.json();
-    for (const key of ['batches', 'jobs', 'events', 'workers', 'templates', 'commercial_attempts', 'legacy_submissions']) state[key] = Array.isArray(data[key]) ? data[key] : [];
+    for (const key of ['batches', 'jobs', 'events', 'workers', 'operations', 'stage_runs', 'templates', 'commercial_attempts', 'legacy_submissions']) state[key] = Array.isArray(data[key]) ? data[key] : [];
     state.settings = data.settings || state.settings;
     const choices = '<option value="">Selecione o segmento</option><option value="all">Todos os segmentos</option>' + state.templates.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join('');
     const segmentSelect = $('#batch-form').elements.industry;

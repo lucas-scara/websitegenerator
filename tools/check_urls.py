@@ -384,7 +384,7 @@ def main():
     parser.add_argument('--url-column')
     parser.add_argument('--id-column')
     parser.add_argument('--timeout', type=float, default=8)
-    parser.add_argument('--workers', type=int, default=5)
+    parser.add_argument('--workers', type=int, default=2)
     parser.add_argument('--retries', type=int, default=1)
     parser.add_argument('--redirects', type=int, default=4)
     parser.add_argument('--byte-limit', type=int, default=262144)

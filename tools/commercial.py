@@ -68,7 +68,7 @@ def reliable_source(record):
         host = (url.hostname or '').lower().rstrip('.')
         return (url.scheme in ('http', 'https') and '.' in host
                 and host != 'localhost' and not host.endswith(('.local','.localhost'))
-                and not url.username and not url.password and checked <= dt.date.today())
+                and not url.username and not url.password and checked <= dt.datetime.now(dt.timezone.utc).date())
     except (TypeError, ValueError):
         return False
 
