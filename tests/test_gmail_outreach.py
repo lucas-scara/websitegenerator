@@ -7,6 +7,7 @@ import threading
 import unittest
 import base64
 from email import message_from_bytes, policy
+from email.utils import parseaddr
 
 spec = importlib.util.spec_from_file_location('control', Path(__file__).parents[1] / 'tools/control.py')
 control = importlib.util.module_from_spec(spec)
@@ -30,6 +31,14 @@ class FakeGmail:
         return self.response
 
 class GmailTests(unittest.TestCase):
+    def test_oauth_scopes_use_canonical_userinfo_email(self):
+        self.assertEqual(gmail.SCOPES, [
+            'openid',
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/gmail.send',
+        ])
+        self.assertNotIn('email', gmail.SCOPES)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = control.DB
@@ -200,7 +209,8 @@ class GmailTests(unittest.TestCase):
                 raw = base64.urlsafe_b64decode(json['raw'] + '===')
                 msg = message_from_bytes(raw, policy=policy.default)
                 self_outer.assertEqual(msg['To'],'empresa@example.org')
-                self_outer.assertIn('scarasoftbauru@gmail.com',msg['From'])
+                self_outer.assertEqual(parseaddr(str(msg['From']))[1],'scarasoftbauru@gmail.com')
+                self_outer.assertEqual(str(msg['Reply-To']),'contato@scarasoft.com.br')
                 self_outer.assertIsNone(msg['Cc'])
                 self_outer.assertIsNone(msg['Bcc'])
                 self_outer.assertEqual(len(list(msg.iter_attachments())),0)
@@ -225,6 +235,8 @@ class GmailTests(unittest.TestCase):
                 self_outer.assertIn('Ver a prévia do site: https://preview.example',plain.get_content())
                 self_outer.assertIn('<a href="https://preview.example">Ver a prévia do site</a>',html.get_content())
                 self_outer.assertNotIn('https://preview.example</p>',html.get_content())
+                self_outer.assertEqual(parseaddr(str(msg['From']))[1],'scarasoftbauru@gmail.com')
+                self_outer.assertEqual(str(msg['Reply-To']),'contato@scarasoft.com.br')
                 self_outer.assertIsNone(msg['Cc'])
                 self_outer.assertIsNone(msg['Bcc'])
                 return Response()
@@ -245,6 +257,8 @@ class GmailTests(unittest.TestCase):
                 self_outer.assertEqual(msg['In-Reply-To'], '<first@scarasoft.com.br>')
                 self_outer.assertEqual(msg['References'], '<first@scarasoft.com.br>')
                 self_outer.assertEqual(msg['To'], 'empresa@example.org')
+                self_outer.assertEqual(parseaddr(str(msg['From']))[1],'scarasoftbauru@gmail.com')
+                self_outer.assertEqual(str(msg['Reply-To']),'contato@scarasoft.com.br')
                 self_outer.assertIsNone(msg['Cc'])
                 self_outer.assertIsNone(msg['Bcc'])
                 return Response()

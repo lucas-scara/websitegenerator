@@ -9,7 +9,11 @@ from pathlib import Path
 import re
 import commercial
 
-SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/gmail.send']
+SCOPES = [
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/gmail.send'
+]
 APPROVED_SENDER = 'scarasoftbauru@gmail.com'
 AUTH_FILE = None  # resolved against the ledger root, or overridden in tests
 SENDER_FILE = None
@@ -333,6 +337,7 @@ class GmailClient:
              thread_id=None, in_reply_to=None, references=None):
         mail = EmailMessage()
         mail['From'] = formataddr(('scarasoft — Lucas Scaranello', sender))
+        mail['Reply-To'] = 'contato@scarasoft.com.br'
         mail['To'] = recipient
         mail['Subject'] = subject
         if message_id: mail['Message-ID'] = message_id
