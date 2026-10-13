@@ -16,16 +16,13 @@ class CommercialTests(unittest.TestCase):
         self.old_db = control.DB
         control.DB = Path(self.tmp.name) / 'ledger.sqlite3'
         self.old_email = os.environ.get('BR_COMMERCIAL_EMAIL')
-        self.old_phone = os.environ.get('BR_COMMERCIAL_PHONE')
         os.environ['BR_COMMERCIAL_EMAIL'] = 'lucas@example.org'
-        os.environ['BR_COMMERCIAL_PHONE'] = '+5514999999999'
         self.batch = control.batch('chaveiros', 'Bauru, SP', 1)['id']
 
     def tearDown(self):
         control.DB = self.old_db
-        for key, value in [('BR_COMMERCIAL_EMAIL',self.old_email),('BR_COMMERCIAL_PHONE',self.old_phone)]:
-            if value is None: os.environ.pop(key,None)
-            else: os.environ[key] = value
+        if self.old_email is None: os.environ.pop('BR_COMMERCIAL_EMAIL',None)
+        else: os.environ['BR_COMMERCIAL_EMAIL'] = self.old_email
         self.tmp.cleanup()
 
     def job(self, presence='sem_site_confirmado', contacts=None):
@@ -43,8 +40,7 @@ class CommercialTests(unittest.TestCase):
         values = {'empresa':'Empresa Exemplo','cidade':'Bauru','segmento':'chaveiro',
                   'busca_exemplo':'chaveiro perto de mim','preview_url':'https://preview.example',
                   'observacao_verificada':'HTTP 503 em duas sondagens',
-                  'assinatura':'scarasoft — Lucas Scaranello','email_comercial':'lucas@example.org',
-                  'telefone_comercial':'+5514999999999'}
+                  'email_comercial':'lucas@example.org'}
         for template in commercial.COPY:
             for variant in ('short','full','subject'):
                 rendered = commercial.render(template,variant,values)
@@ -53,6 +49,12 @@ class CommercialTests(unittest.TestCase):
             short = commercial.render(template,'short',values)
             for word in ('serviços','confiança','contato','não oficial'):
                 self.assertIn(word,short)
+            full = commercial.render(template,'full',values)
+            self.assertIn('Lucas Scaranello\nscarasoft\nlucas@example.org',full)
+            self.assertFalse(commercial.message_has_phone(full))
+            self.assertNotIn('+5514999999999',full)
+        self.assertTrue(commercial.message_has_phone('Fale comigo pelo (11) 98888-7777.'))
+        self.assertFalse(commercial.message_has_phone('https://preview.example/11988887777'))
         self.assertIn('chaveiro perto de mim',commercial.render('redesign','short',values))
         for segment, (_, query) in commercial.SEARCHES.items():
             self.assertTrue(query.replace('{cidade}','Bauru'))
@@ -78,6 +80,39 @@ class CommercialTests(unittest.TestCase):
             control.prepare_commercial(jid)
         self.assertEqual(control.snapshot()['jobs'][0]['stage'],'ready')
         self.assertEqual(len(control.snapshot()['commercial_attempts']),2)
+
+    def test_form_and_whatsapp_signatures_have_only_commercial_email(self):
+        form_contacts = {'form': {'status':'encontrado','eligible':True,'purpose':'contato comercial','url':'https://example.org/contato'}}
+        jid = self.job(contacts=form_contacts)
+        form = control.prepare_commercial(jid)
+        self.assertEqual(form['channel'],'form')
+        self.assertTrue(form['message'].endswith('Lucas Scaranello\nscarasoft\nlucas@example.org'))
+        self.assertNotIn('+5514999999999',form['message'])
+        control.record_commercial(jid,'failed_no_send','Nenhum envio ocorreu')
+        with control.connect() as con:
+            data = json.loads(con.execute('SELECT data FROM jobs WHERE id=?',(jid,)).fetchone()['data'])
+            data['contacts'] = {'phone':{'value':'+5514999999999','source':'https://example.org/ficha','checked_at':control.now()[:10]}}
+            con.execute('UPDATE jobs SET data=? WHERE id=?',(json.dumps(data),jid))
+        whatsapp = control.prepare_commercial(jid)
+        self.assertEqual(whatsapp['channel'],'whatsapp_manual')
+        self.assertTrue(whatsapp['message'].endswith('Lucas Scaranello\nscarasoft\nlucas@example.org'))
+        self.assertNotIn('+5514999999999',whatsapp['message'])
+        self.assertIn('wa.me/5514999999999',whatsapp['whatsapp_url'])
+
+    def test_local_env_loader_ignores_legacy_commercial_phone(self):
+        old_root = control.ROOT
+        old_email = os.environ.pop('BR_COMMERCIAL_EMAIL', None)
+        old_phone = os.environ.pop('BR_COMMERCIAL_PHONE', None)
+        try:
+            control.ROOT = Path(self.tmp.name)
+            (control.ROOT / '.env').write_text('BR_COMMERCIAL_EMAIL=contato@scarasoft.com.br\nBR_COMMERCIAL_PHONE=+5511900000000\n')
+            control.load_commercial_env()
+            self.assertEqual(os.environ['BR_COMMERCIAL_EMAIL'],'contato@scarasoft.com.br')
+            self.assertNotIn('BR_COMMERCIAL_PHONE',os.environ)
+        finally:
+            control.ROOT = old_root
+            if old_email is not None: os.environ['BR_COMMERCIAL_EMAIL'] = old_email
+            if old_phone is not None: os.environ['BR_COMMERCIAL_PHONE'] = old_phone
 
     def test_manual_whatsapp_not_sent_and_opt_out(self):
         jid = self.job(contacts={'phone':{'value':'+5514999999999','source':'https://example.org/ficha','checked_at':control.now()[:10]},'whatsapp':{'status':'presumido'}})

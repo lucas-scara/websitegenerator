@@ -293,7 +293,13 @@ def snapshot():
             JOIN jobs ON jobs.id=operations.job_id ORDER BY operations.started_at DESC LIMIT 200''')]
         out['stage_runs'] = [dict(r) for r in c.execute('''SELECT stage_runs.*,jobs.batch_id FROM stage_runs
             JOIN jobs ON jobs.id=stage_runs.job_id ORDER BY stage_runs.id DESC LIMIT 400''')]
-        for j in out['jobs']: j['data'] = json.loads(j['data'])
+        for j in out['jobs']:
+            j['data'] = json.loads(j['data'])
+            key = ('commercial_contact' if j['contact_status'] == 'prepared' else
+                   'manual_outreach' if j['stage'] == 'manual' else
+                   'contact_simulation' if j['stage'] == 'simulated' else None)
+            j['commercial_requires_review'] = commercial.message_has_phone(
+                (j['data'].get(key) or {}).get('message')) if key else False
         out['commercial_attempts'] = [dict(r) for r in c.execute('SELECT * FROM commercial_attempts ORDER BY id DESC')]
         out['gmail_authorization'] = {}
         out['gmail_followups'] = {}
@@ -764,11 +770,10 @@ def require_outreach_authorization(c, job, message=None):
             or not 1 <= auth['max_contacts'] <= batch['requested_count']):
         raise ValueError('Live outreach authorization does not match this batch and scope')
     email = os.environ.get('BR_COMMERCIAL_EMAIL', '').strip()
-    phone = os.environ.get('BR_COMMERCIAL_PHONE', '').strip()
-    if not email or not phone or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
-        raise ValueError('Approved commercial email and phone must be configured locally')
-    if message is not None and ('scarasoft — Lucas Scaranello' not in message or email not in message or phone not in message):
-        raise ValueError('Message must contain the approved signature and configured commercial contacts')
+    if not email or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+        raise ValueError('Approved commercial email must be configured locally')
+    if message is not None:
+        require_commercial_identity(message)
     attempts = c.execute('SELECT COUNT(*) FROM submissions JOIN jobs ON jobs.id=submissions.job_id WHERE jobs.batch_id=?',
                          (job['batch_id'],)).fetchone()[0]
     if attempts >= auth['max_contacts']:
@@ -801,6 +806,7 @@ def contact_begin(jid,worker,message,form_url):
 
 def contact_simulate(jid, worker, message, form_url):
     if not message.strip(): raise ValueError('Message is empty')
+    if commercial.message_has_phone(message): raise ValueError('Message contains a phone number; review before sending')
     domain(form_url)
     with connect() as c:
         j=own(c,jid,worker); data=json.loads(j['data'])
@@ -858,6 +864,8 @@ def contact_finish(jid,worker,status,evidence):
 def manual_outreach(jid, worker, reason, message, email='', phone=''):
     if not reason.strip() or not message.strip():
         raise ValueError('Manual outreach needs a reason and prepared message')
+    if commercial.message_has_phone(message):
+        raise ValueError('Message contains a phone number; review before sending')
     if email: email = identity('email:' + email).removeprefix('email:')
     if phone: phone = identity('phone:' + phone).removeprefix('phone:')
     with connect() as c:
@@ -929,16 +937,15 @@ def prepare_commercial(jid, observation=''):
         noun, search = commercial.SEARCHES[segment]
         values = {'empresa': job['name'], 'cidade': city, 'segmento': noun,
                   'busca_exemplo': search.replace('{cidade}', city), 'preview_url': job['preview_url'],
-                  'observacao_verificada': observation.strip(), 'assinatura': 'scarasoft — Lucas Scaranello',
-                  'email_comercial': os.environ.get('BR_COMMERCIAL_EMAIL','').strip(),
-                  'telefone_comercial': os.environ.get('BR_COMMERCIAL_PHONE','').strip()}
+                  'observacao_verificada': observation.strip(),
+                  'email_comercial': os.environ.get('BR_COMMERCIAL_EMAIL','').strip()}
         variant = 'full' if channel == 'email' else 'short'
         message = commercial.render(template, variant, values)
         if channel == 'email':
             message += '\n\nSe preferir não receber novos contatos da scarasoft, responda a este e-mail solicitando isso.'
         subject = commercial.render(template, 'subject', values) if channel == 'email' else ''
         if channel != 'email':
-            message += '\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}'.format(**values)
+            message += '\n\nLucas Scaranello\nscarasoft\n{email_comercial}'.format(**values)
         require_commercial_identity(message)
         prepared = {'channel': channel, 'destination': destination, 'template': template,
                     'message': message, 'subject': subject, 'prepared_at': now(),
@@ -951,21 +958,22 @@ def prepare_commercial(jid, observation=''):
 
 def require_commercial_identity(message):
     email = os.environ.get('BR_COMMERCIAL_EMAIL','').strip()
-    phone = os.environ.get('BR_COMMERCIAL_PHONE','').strip()
-    if not email or not phone or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
-        raise ValueError('Approved commercial email and phone must be configured locally')
-    if any(value not in message for value in ('Lucas Scaranello', 'scarasoft', email, phone)):
+    if not email or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+        raise ValueError('Approved commercial email must be configured locally')
+    if any(value not in message for value in ('Lucas Scaranello', 'scarasoft', email)):
         raise ValueError('Message lacks approved commercial identity')
+    if commercial.message_has_phone(message):
+        raise ValueError('Prepared message contains a phone number; review before sending')
 
 def load_commercial_env():
-    """Read only the two approved contact fields for the local dashboard."""
+    """Read only the approved commercial email for the local dashboard."""
     try: lines = (ROOT / '.env').read_text().splitlines()
     except OSError: return
     for line in lines:
-        match = re.fullmatch(r'\s*(BR_COMMERCIAL_EMAIL|BR_COMMERCIAL_PHONE)\s*=\s*(.*?)\s*', line)
+        match = re.fullmatch(r'\s*BR_COMMERCIAL_EMAIL\s*=\s*(.*?)\s*', line)
         if match:
-            value = match.group(2).strip().strip('"\'')
-            if value: os.environ.setdefault(match.group(1), value)
+            value = match.group(1).strip().strip('"\'')
+            if value: os.environ.setdefault('BR_COMMERCIAL_EMAIL', value)
 
 def commercial_proof(proof):
     if not isinstance(proof, str) or not proof.strip():
