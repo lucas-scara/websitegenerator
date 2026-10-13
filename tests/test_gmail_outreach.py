@@ -155,6 +155,22 @@ class GmailTests(unittest.TestCase):
         self.assertEqual(state['jobs'][0]['contact_status'],'sent')
         self.assertEqual(state['commercial_attempts'][0]['source'],'gmail_api')
         with self.assertRaises(ValueError): self.dispatch(client=fake)
+    def test_confirmed_gmail_response_and_optout_need_no_new_send_proof(self):
+        self.prepare(); self.authorize()
+        result = self.dispatch()
+        self.assertEqual(result['status'],'sent')
+        self.assertEqual(control.record_commercial(self.job,'replied','Empresa respondeu')['contact_status'],'replied')
+        self.assertEqual(control.record_commercial(self.job,'opted_out','Solicitou exclusão')['contact_status'],'opted_out')
+        state = control.snapshot()
+        self.assertEqual(state['jobs'][0]['stage'],'ready')
+        self.assertEqual(state['commercial_attempts'][-1]['gmail_message_id'],'gmail12345678')
+        with self.assertRaises(ValueError): self.dispatch()
+    def test_uncertain_gmail_result_cannot_be_bypassed_by_external_send_record(self):
+        self.prepare(); self.authorize()
+        self.assertEqual(self.dispatch(client=FakeGmail(error=TimeoutError()))['status'],'uncertain')
+        with self.assertRaisesRegex(ValueError,'reconciled'):
+            control.record_commercial(self.job,'sent_external','Envio externo','email','id:message-12345678')
+        with self.assertRaises(ValueError): self.dispatch()
     def test_approval_must_include_company_and_sender(self):
         self.prepare(); self.authorize(jobs=['other-job'])
         with self.assertRaisesRegex(ValueError,'scope'): self.dispatch()
