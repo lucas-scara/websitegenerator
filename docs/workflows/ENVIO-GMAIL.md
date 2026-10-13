@@ -37,6 +37,7 @@ Prepare e revise as mensagens. Formulários comerciais elegíveis continuam tend
   "mode": "live",
   "approved_by": "Lucas Scaranello",
   "approved_at": "2026-10-12T12:00:00Z",
+  "expires_at": "2026-10-19T12:00:00Z",
   "batch_id": "batch-ID_REAL",
   "job_ids": ["job-ID_APROVADO"],
   "sender": "scarasoftbauru@gmail.com",
@@ -45,9 +46,9 @@ Prepare e revise as mensagens. Formulários comerciais elegíveis continuam tend
 }
 ```
 
-`job_ids` é a seleção explícita de empresas. `max_contacts` limita tentativas do lote, incluindo falhas anteriores; `daily_limit` limita tentativas em UTC em todos os lotes e vale 5 se omitido. Para simular ou desabilitar, altere `mode` para `dry_run` ou remova o arquivo. O dashboard e a prospecção não criam nem alteram essa autorização. Editar um arquivo local protegido é a aprovação operacional; não há botão no dashboard para aprovar lote.
+`job_ids` é a seleção explícita de empresas. `approved_at` exige data e hora ISO com fuso e não pode estar no futuro. `expires_at` é opcional; quando informado, deve ser posterior à aprovação e ao momento do envio. `max_contacts` limita tentativas do lote, incluindo falhas anteriores; `daily_limit` limita tentativas em UTC em todos os lotes e vale 5 se omitido. Para simular ou desabilitar, altere `mode` para `dry_run` ou remova o arquivo. O dashboard e a prospecção não criam nem alteram essa autorização. Editar um arquivo local protegido é a aprovação operacional; não há botão no dashboard para aprovar lote.
 
-Execute `python3 tools/control.py gmail-simulate --job ID` para validar sem reservar tentativa. Depois de confirmar os campos no dashboard, use **Enviar via Gmail** ou `python3 tools/control.py gmail-send --job ID`. Ambos aplicam as mesmas verificações no backend. Cada mensagem tem um destinatário, corpo UTF-8 e não contém CC, BCC ou anexos. A mensagem preparada inclui a identidade comercial e instrução de opt-out. O e-mail inicial tem versão HTML com o texto clicável **Ver a prévia do site** e versão texto simples com a URL explícita como fallback para leitores sem HTML; o dashboard mostra apenas o texto do link e oferece a prévia separadamente.
+Execute `python3 tools/control.py gmail-simulate --job ID` para validar sem reservar tentativa. A resposta separa `commercial_eligibility` (prévia, canal, destinatário e histórico) de `authorization` e `live_authorized` (aprovação local e capacidade do lote e do dia). `would_send_live` só é verdadeiro quando ambos permitem tentar o envio; a simulação permanece em `dry_run`, não usa Gmail e não verifica o token OAuth. Depois de confirmar os campos no dashboard, use **Enviar via Gmail** ou `python3 tools/control.py gmail-send --job ID`. Ambos aplicam as mesmas verificações no backend. Cada mensagem tem um destinatário, corpo UTF-8 e não contém CC, BCC ou anexos. A mensagem preparada inclui a identidade comercial e instrução de opt-out. O e-mail inicial tem versão HTML com o texto clicável **Ver a prévia do site** e versão texto simples com a URL explícita como fallback para leitores sem HTML; o dashboard mostra apenas o texto do link e oferece a prévia separadamente.
 
 ## Acompanhamento
 

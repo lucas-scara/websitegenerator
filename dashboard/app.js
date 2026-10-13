@@ -277,7 +277,9 @@ $('#dialog-content').addEventListener('click', async event => {
       const response = await fetch(`/api/commercial/${route}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({job_id:selectedJob, touch:route === 'gmail-followup' ? Number(button.dataset.touch) : undefined})});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      $('#commercial-feedback').textContent = route === 'gmail-simulate' ? 'Simulação concluída; nenhum e-mail enviado.' : `Resultado: ${data.status}${data.gmail_message_id ? ' · Gmail ID: ' + data.gmail_message_id : ''}`;
+      $('#commercial-feedback').textContent = route === 'gmail-simulate'
+        ? `Simulação: contato ${data.commercial_eligibility.eligible ? 'elegível' : 'bloqueado'} (${data.commercial_eligibility.reason}); envio live ${data.live_authorized ? 'autorizado' : 'não autorizado'} (${data.authorization.reason}). Nenhum e-mail enviado.`
+        : `Resultado: ${data.status}${data.gmail_message_id ? ' · Gmail ID: ' + data.gmail_message_id : ''}`;
       previousSignature = '';
     } catch (error) { $('#commercial-feedback').textContent = error.message; }
     finally { button.disabled = false; }

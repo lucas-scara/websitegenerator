@@ -40,6 +40,17 @@ def email_address(value):
     return (isinstance(value, str) and len(value) <= 254 and
             bool(re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", value)))
 
+def authorization_time(value):
+    if not isinstance(value, str) or not re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}', value):
+        raise ValueError('Authorization requires an ISO date and time with timezone')
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError as exc:
+        raise ValueError('Invalid authorization date and time') from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError('Authorization date and time requires timezone')
+    return parsed
+
 def authorization(ledger, job, *, live=False):
     path = private_path(ledger, AUTH_FILE, 'gmail-authorization.json')
     try:
@@ -50,8 +61,17 @@ def authorization(ledger, job, *, live=False):
     if auth.get('mode') != 'live':
         if live: raise ValueError('Gmail live sending is disabled: authorization is dry_run')
         return {'mode': 'dry_run', 'authorized': False, 'reason': 'Autorização em dry_run'}
+    try:
+        approved_at = authorization_time(auth.get('approved_at'))
+        expires_at = authorization_time(auth['expires_at']) if 'expires_at' in auth else None
+        current_time = dt.datetime.now(dt.timezone.utc)
+        if approved_at > current_time or (expires_at is not None and
+                                           (expires_at <= approved_at or expires_at <= current_time)):
+            raise ValueError('Authorization date is future or expired')
+    except ValueError as exc:
+        if live: raise ValueError('Gmail live authorization has an invalid, future or expired date') from exc
+        return {'mode': 'live', 'authorized': False, 'reason': 'Autorização com data inválida, futura ou expirada'}
     valid = (auth.get('approved_by') == 'Lucas Scaranello'
-             and isinstance(auth.get('approved_at'), str) and bool(auth['approved_at'].strip())
              and auth.get('batch_id') == job['batch_id']
              and isinstance(auth.get('job_ids'), list) and job['id'] in auth['job_ids']
              and all(isinstance(x, str) for x in auth['job_ids'])
@@ -108,12 +128,26 @@ def simulate(ledger, jid):
     with ledger.connect() as c:
         job = c.execute('SELECT * FROM jobs WHERE id=?', (jid,)).fetchone()
         if job is None: raise ValueError('Unknown job')
-        prepared = validate(ledger, c, job)
+        try:
+            prepared = validate(ledger, c, job)
+            eligibility = {'eligible': True, 'reason': 'Contato por e-mail elegível'}
+        except ValueError as exc:
+            prepared = None
+            eligibility = {'eligible': False, 'reason': str(exc)}
         auth = authorization(ledger, job)
-        return {'job_id': jid, 'mode': 'dry_run', 'would_send': True,
-                'authorization': auth, 'recipient': prepared['destination'],
-                'subject': prepared['subject'], 'message': prepared['message'],
-                'preview_url': job['preview_url'],
+        if auth['authorized']:
+            try:
+                limits(c, job, auth, ledger.now())
+            except ValueError as exc:
+                auth = {**auth, 'authorized': False, 'reason': str(exc)}
+        live_ready = eligibility['eligible'] and auth['authorized']
+        return {'job_id': jid, 'mode': 'dry_run', 'would_send': live_ready,
+                'commercial_eligibility': eligibility, 'authorization': auth,
+                'live_authorized': auth['authorized'], 'would_send_live': live_ready,
+                'recipient': prepared['destination'] if prepared else None,
+                'subject': prepared['subject'] if prepared else None,
+                'message': prepared['message'] if prepared else None,
+                'preview_url': job['preview_url'] if prepared else None,
                 'note': 'Simulation only; no Gmail call or attempt reserved'}
 
 def followup_message(name, touch):
@@ -239,7 +273,7 @@ def dispatch(ledger, jid, client=None, touch=0):
         if c.execute('SELECT changes()').fetchone()[0] != 1:
             raise ValueError('Gmail attempt changed during dispatch; inspect ledger')
         next_status = ('pending' if touch == 0 else 'sent') if status == 'failed_no_send' else status
-        c.execute("UPDATE jobs SET contact_status=CASE WHEN contact_status='opted_out' THEN 'opted_out' ELSE ? END,updated_at=? WHERE id=?",
+        c.execute("UPDATE jobs SET contact_status=CASE WHEN contact_status IN ('replied','interested','not_interested','opted_out') THEN contact_status ELSE ? END,updated_at=? WHERE id=?",
                   (next_status, ledger.now(), jid))
         ledger.event(c, jid, 'Gmail attempt result: ' + status)
     return {'attempt_id': attempt, 'touch': touch, 'status': status, 'gmail_message_id': remote_id,
@@ -258,7 +292,7 @@ def reconcile(ledger, attempt_id, status, evidence, message_id='', thread_id='')
             raise ValueError('Only pending or uncertain Gmail attempts can be reconciled')
         c.execute('UPDATE commercial_attempts SET status=?,evidence=?,gmail_message_id=?,gmail_thread_id=COALESCE(?,gmail_thread_id) WHERE id=?',
                   (status, evidence.strip()[:500], message_id or None, thread_id or None, attempt_id))
-        c.execute("UPDATE jobs SET contact_status=CASE WHEN contact_status='opted_out' THEN 'opted_out' ELSE ? END,updated_at=? WHERE id=?",
+        c.execute("UPDATE jobs SET contact_status=CASE WHEN contact_status IN ('replied','interested','not_interested','opted_out') THEN contact_status ELSE ? END,updated_at=? WHERE id=?",
                   ('sent' if status == 'sent' or row['touch'] > 0 else 'pending', ledger.now(), row['job_id']))
         ledger.event(c, row['job_id'], 'Gmail attempt explicitly reconciled: ' + status)
         return {'attempt_id': attempt_id, 'status': status}

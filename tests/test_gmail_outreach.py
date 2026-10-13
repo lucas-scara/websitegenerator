@@ -52,10 +52,12 @@ class GmailTests(unittest.TestCase):
     def private(self, path, data):
         path.write_text(json.dumps(data))
         path.chmod(0o600)
-    def authorize(self, jobs=None, max_contacts=3, daily_limit=5, sender='scarasoftbauru@gmail.com'):
-        self.private(gmail.AUTH_FILE, {'mode':'live','approved_by':'Lucas Scaranello',
+    def authorize(self, jobs=None, max_contacts=3, daily_limit=5, sender='scarasoftbauru@gmail.com', **overrides):
+        auth = {'mode':'live','approved_by':'Lucas Scaranello',
                      'approved_at':control.now(),'batch_id':self.batch,'job_ids':jobs or [self.job],
-                     'sender':sender,'max_contacts':max_contacts,'daily_limit':daily_limit})
+                     'sender':sender,'max_contacts':max_contacts,'daily_limit':daily_limit}
+        auth.update(overrides)
+        self.private(gmail.AUTH_FILE, auth)
         self.private(gmail.SENDER_FILE, {'oauth_email':'scarasoftbauru@gmail.com','sender':sender})
     def new_job(self, name, email, form=None):
         jid = control.add(self.batch, name)['id']
@@ -77,10 +79,59 @@ class GmailTests(unittest.TestCase):
         self.prepare()
         result = gmail.simulate(control.gmail_ledger(),self.job)
         self.assertEqual(result['mode'],'dry_run')
-        self.assertTrue(result['would_send'])
+        self.assertTrue(result['commercial_eligibility']['eligible'])
+        self.assertFalse(result['live_authorized'])
+        self.assertFalse(result['would_send_live'])
+        self.assertFalse(result['would_send'])
         self.assertEqual(result['preview_url'], 'https://preview.example')
         self.assertEqual(control.snapshot()['commercial_attempts'],[])
         with self.assertRaisesRegex(ValueError,'disabled'): self.dispatch()
+        self.assertEqual(control.snapshot()['commercial_attempts'],[])
+    def test_simulation_separates_commercial_eligibility_and_live_approval(self):
+        self.prepare(); self.authorize()
+        ready = gmail.simulate(control.gmail_ledger(), self.job)
+        self.assertTrue(ready['commercial_eligibility']['eligible'])
+        self.assertTrue(ready['live_authorized'])
+        self.assertTrue(ready['would_send_live'])
+        with control.connect() as c:
+            data = json.loads(c.execute('SELECT data FROM jobs WHERE id=?', (self.job,)).fetchone()['data'])
+            data['contacts']['form'] = {'status':'encontrado','url':'https://example.org/contato',
+                                        'purpose':'contato comercial','eligible':True}
+            c.execute('UPDATE jobs SET data=? WHERE id=?', (json.dumps(data),self.job))
+        blocked = gmail.simulate(control.gmail_ledger(), self.job)
+        self.assertFalse(blocked['commercial_eligibility']['eligible'])
+        self.assertTrue(blocked['live_authorized'])
+        self.assertFalse(blocked['would_send_live'])
+        self.assertIsNone(blocked['recipient'])
+        self.assertEqual(control.snapshot()['commercial_attempts'], [])
+    def test_simulation_reports_daily_capacity_without_reserving(self):
+        other = self.new_job('Empresa Dois', 'second@example.org')
+        self.prepare(); self.prepare(other)
+        self.authorize(jobs=[self.job,other],daily_limit=1)
+        self.dispatch()
+        before = len(control.snapshot()['commercial_attempts'])
+        result = gmail.simulate(control.gmail_ledger(),other)
+        self.assertTrue(result['commercial_eligibility']['eligible'])
+        self.assertFalse(result['live_authorized'])
+        self.assertIn('daily',result['authorization']['reason'])
+        self.assertEqual(len(control.snapshot()['commercial_attempts']),before)
+    def test_authorization_dates_and_optional_expiration(self):
+        self.prepare()
+        now = control.dt.datetime.now(control.dt.timezone.utc)
+        future = (now + control.dt.timedelta(days=1)).isoformat()
+        past = (now - control.dt.timedelta(days=1)).isoformat()
+        for invalid in ('yesterday','2026-10-12','2026-10-12T12:00:00',future):
+            with self.subTest(approved_at=invalid):
+                self.authorize(approved_at=invalid)
+                self.assertFalse(gmail.authorization(control.gmail_ledger(),
+                    control.snapshot()['jobs'][0])['authorized'])
+                with self.assertRaisesRegex(ValueError,'date'): self.dispatch()
+        for expiry in ('bad date', past, future.replace('+00:00','')):
+            with self.subTest(expires_at=expiry):
+                self.authorize(approved_at=past,expires_at=expiry)
+                with self.assertRaisesRegex(ValueError,'date'): self.dispatch()
+        self.authorize(approved_at=past,expires_at=future)
+        self.assertTrue(gmail.simulate(control.gmail_ledger(),self.job)['live_authorized'])
         self.assertEqual(control.snapshot()['commercial_attempts'],[])
     def test_valid_authorization_and_confirmed_send(self):
         self.prepare(); self.authorize()
@@ -236,6 +287,23 @@ class GmailTests(unittest.TestCase):
         self_outer = self
         self.assertEqual(self.dispatch(client=OptOutDuringSend())['status'],'sent')
         self.assertEqual(control.snapshot()['jobs'][0]['contact_status'],'opted_out')
+    def test_response_states_changed_during_initial_send_are_preserved(self):
+        jobs = [self.job] + [self.new_job('Empresa ' + status, status + '@example.org')
+                             for status in ('interested','not_interested','opted_out')]
+        self.authorize(jobs=jobs, max_contacts=4, daily_limit=4)
+        for jid, state in zip(jobs, ('replied','interested','not_interested','opted_out')):
+            with self.subTest(state=state):
+                self.prepare(jid)
+                class ConcurrentChange(FakeGmail):
+                    def send(self, recipient, sender, subject, body, preview_url=None, **kwargs):
+                        with control.connect() as c:
+                            c.execute('UPDATE jobs SET contact_status=? WHERE id=?', (state,jid))
+                        return super().send(recipient,sender,subject,body,preview_url,**kwargs)
+                result = self.dispatch(jid,ConcurrentChange())
+                self.assertEqual(result['status'],'sent')
+                with control.connect() as c:
+                    self.assertEqual(c.execute('SELECT contact_status FROM jobs WHERE id=?',(jid,)).fetchone()[0],state)
+                    self.assertEqual(c.execute('SELECT status FROM commercial_attempts WHERE id=?',(result['attempt_id'],)).fetchone()[0],'sent')
     def age_first_send(self, days):
         at = (control.dt.datetime.now(control.dt.timezone.utc) - control.dt.timedelta(days=days)).isoformat(timespec='seconds')
         with control.connect() as c:
@@ -259,6 +327,27 @@ class GmailTests(unittest.TestCase):
         self.assertEqual(final['status'],'sent')
         self.assertIsNone(control.snapshot()['gmail_followups'][self.job]['next_touch'])
         self.assertEqual(control.snapshot()['jobs'][0]['contact_status'],'sent')
+    def test_response_states_changed_during_followup_are_preserved(self):
+        states = ('replied','interested','not_interested','opted_out')
+        jobs = [self.job] + [self.new_job('Empresa ' + state, state + '@example.org') for state in states[1:]]
+        self.authorize(jobs=jobs,max_contacts=4,daily_limit=10)
+        for jid, state in zip(jobs,states):
+            with self.subTest(state=state):
+                self.prepare(jid)
+                self.dispatch(jid)
+                at = (control.dt.datetime.now(control.dt.timezone.utc) - control.dt.timedelta(days=5)).isoformat(timespec='seconds')
+                with control.connect() as c:
+                    c.execute("UPDATE commercial_attempts SET created_at=? WHERE job_id=? AND source='gmail_api' AND touch=0", (at,jid))
+                class ConcurrentChange(FakeGmail):
+                    def send(self, recipient, sender, subject, body, preview_url=None, **kwargs):
+                        with control.connect() as c:
+                            c.execute('UPDATE jobs SET contact_status=? WHERE id=?', (state,jid))
+                        return super().send(recipient,sender,subject,body,preview_url,**kwargs)
+                result = gmail.dispatch(control.gmail_ledger(),jid,ConcurrentChange(),touch=1)
+                self.assertEqual(result['status'],'sent')
+                with control.connect() as c:
+                    self.assertEqual(c.execute('SELECT contact_status FROM jobs WHERE id=?',(jid,)).fetchone()[0],state)
+                    self.assertEqual(c.execute('SELECT status FROM commercial_attempts WHERE id=?',(result['attempt_id'],)).fetchone()[0],'sent')
     def test_followup_not_due_or_after_response_and_no_duplicates(self):
         self.prepare(); self.authorize()
         self.dispatch()
