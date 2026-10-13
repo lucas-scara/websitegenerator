@@ -113,6 +113,21 @@ test('produção publicada e contato comercial permanecem separados', () => {
   assert.match(display.commercialSection(job), /<option value="replied">/);
 });
 
+test('cartão de prévia verificada e envio confirmado oculta andamento legado na fila', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function render()')) + '\nthis.jobCard = jobCard; this.production = production;', display);
+  const job = { id: 'job-1', name: 'Empresa Teste', stage: 'queued', detail: 'Na fila', contact_status: 'sent', preview_url: 'https://preview.example', data: { preview_verified: true } };
+  const html = display.jobCard(job, 0);
+  assert.match(html, /Produção: Prévia verificada/);
+  assert.match(html, /Contato: Enviado/);
+  assert.match(html, /Próxima ação: Aguardar resposta/);
+  assert.doesNotMatch(html, /Na fila/);
+  assert.equal(job.stage, 'queued');
+  assert.equal(job.contact_status, 'sent');
+  assert.match(display.jobCard({ ...job, reason: 'Revisão necessária' }, 0), /Revisão necessária/);
+  assert.match(display.jobCard({ ...job, data: { preview_verified: false } }, 0), /Na fila/);
+});
+
 test('mensagem de e-mail preparada mostra simulação e não oferece preparo duplicado', () => {
   const display = vm.createContext({ URL, Intl, Date });
   vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.gmail_authorization = { "job-1": { mode: "live", authorized: true, sender: "scarasoftbauru@gmail.com", reason: "Autorizado" } }; this.commercialSection = commercialSection;', display);
@@ -134,6 +149,58 @@ test('acompanhamento mostra datas e ação apenas quando vencido e autorizado', 
   assert.match(display.commercialSection(job), /Primeiro envio:/);
   vm.runInContext('state.gmail_followups["job-1"].due = false;', display);
   assert.doesNotMatch(display.commercialSection(job), /id="gmail-followup"/);
+});
+
+test('após Gmail confirmado, resposta e opt-out pedem somente evidência textual', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.commercial_attempts = [{ job_id: "job-1", source: "gmail_api", channel: "email", status: "sent", evidence: "Gmail confirmou", sender: "scarasoftbauru@gmail.com", gmail_message_id: "gmail12345678", created_at: "2026-10-01T12:00:00Z" }]; this.commercialSection = commercialSection;', display);
+  const job = { id: 'job-1', stage: 'ready', contact_status: 'sent', preview_url: 'https://preview.example', data: { preview_verified: true, commercial_contact: { channel: 'email', destination: 'empresa@example.org', subject: 'Proposta', message: 'Texto preparado' } } };
+  const html = display.commercialSection(job);
+  for (const status of ['replied', 'interested', 'not_interested', 'opted_out']) assert.match(html, new RegExp(`value="${status}"`));
+  assert.match(html, /name="evidence" required/);
+  assert.doesNotMatch(html, /name="channel"|name="proof"|id="gmail-send"|id="gmail-simulate"/);
+  assert.match(html, /Destinatário: empresa@example.org/);
+  assert.match(html, /Remetente: scarasoftbauru@gmail.com/);
+  assert.match(html, /Assunto: Proposta/);
+  assert.match(html, /Ver a prévia do site/);
+  assert.match(html, /Gmail ID: gmail12345678/);
+});
+
+test('envio externo exige canal e comprovante; resultado incerto mantém reconciliação', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nthis.commercialSection = commercialSection;', display);
+  const job = { id: 'job-1', stage: 'ready', contact_status: 'prepared', preview_url: 'https://preview.example', data: { preview_verified: true, commercial_contact: { channel: 'email', destination: 'empresa@example.org', subject: 'Proposta', message: 'Texto preparado' } } };
+  let html = display.commercialSection(job);
+  assert.match(html, /value="sent_external"/);
+  assert.match(html, /name="proof" required/);
+  assert.match(html, /name="channel"/);
+  job.contact_status = 'not_sent';
+  html = display.commercialSection(job);
+  assert.match(html, /name="channel" required/);
+  job.contact_status = 'uncertain';
+  html = display.commercialSection(job);
+  assert.match(html, /reconcilie a tentativa antes de qualquer novo envio/);
+  assert.match(html, /value="opted_out"/);
+  assert.doesNotMatch(html, /value="sent_external"|value="sent"|id="gmail-send"|id="gmail-simulate"|name="proof"|name="channel"/);
+  vm.runInContext('state.commercial_attempts = [{ job_id: "job-1", source: "gmail_api", status: "uncertain", channel: "email", evidence: "Timeout", created_at: "2026-10-01T12:00:00Z" }];', display);
+  assert.match(display.commercialSection(job), /reconcilie a tentativa Gmail/);
+});
+
+test('trocar para opt-out remove exigência de comprovante oculto', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nthis.updateRecordFields = updateRecordFields;', display);
+  const field = () => ({ hidden: false, control: { required: false }, querySelector() { return this.control; } });
+  const channel = field(), proof = field();
+  const form = { querySelector(selector) { return selector === '.external-channel' ? channel : proof; } };
+  display.updateRecordFields(form, 'sent_external');
+  assert.equal(channel.control.required, true);
+  assert.equal(proof.control.required, true);
+  display.updateRecordFields(form, 'opted_out');
+  assert.equal(channel.hidden, true);
+  assert.equal(proof.hidden, true);
+  assert.equal(channel.control.required, false);
+  assert.equal(proof.control.required, false);
+  assert.doesNotThrow(() => display.updateRecordFields({ querySelector: () => null }, 'replied'));
 });
 
 test('operações mostram tentativas sem injetar HTML em falhas e artefatos', () => {

@@ -100,7 +100,10 @@ function commercialSection(job) {
   const canPrepare = job.data?.preview_verified === true && ['not_sent', 'pending', 'manual_required'].includes(current) && !contact.message;
   const auth = state.gmail_authorization?.[job.id] || { mode: 'dry_run', authorized: false, reason: 'Autorização local ausente' };
   const previewHref = safeURL(job.preview_url);
-  const gmailPanel = contact.channel === 'email' && contact.message ? `<div class="gmail-panel"><div class="meta-label">Envio Gmail</div><p>Destinatário: ${escapeHTML(contact.destination || 'Indisponível')} · Remetente: ${escapeHTML(auth.sender || 'Não autorizado')}</p><p>Assunto: ${escapeHTML(contact.subject || 'Indisponível')}</p><p>Prévia: ${escapeHTML((contact.message || '').slice(0, 180))}</p>${previewHref ? `<p><a href="${escapeHTML(previewHref)}" target="_blank" rel="noopener noreferrer">Ver a prévia do site ↗</a></p>` : ''}<p>Autorização: ${escapeHTML(auth.mode)} · ${escapeHTML(auth.reason)}</p><button type="button" id="gmail-simulate">Simular envio</button>${auth.authorized && current === 'prepared' ? '<button type="button" id="gmail-send">Enviar via Gmail</button>' : ''}</div>` : '';
+  const gmailAttempt = attempts.find(item => item.source === 'gmail_api');
+  const gmailSender = gmailAttempt?.sender || auth.sender || 'Não configurado';
+  const gmailControls = current === 'prepared' ? `<p>Autorização: ${escapeHTML(auth.mode)} · ${escapeHTML(auth.reason)}</p><button type="button" id="gmail-simulate">Simular envio</button>${auth.authorized ? '<button type="button" id="gmail-send">Enviar via Gmail</button>' : ''}` : current === 'uncertain' ? `<p>Resultado incerto: reconcilie a tentativa${gmailAttempt ? ' Gmail' : ''} antes de qualquer novo envio.</p>` : '';
+  const gmailPanel = contact.channel === 'email' && contact.message ? `<div class="gmail-panel"><div class="meta-label">Envio Gmail</div><p>Destinatário: ${escapeHTML(contact.destination || 'Indisponível')} · Remetente: ${escapeHTML(gmailSender)}</p><p>Assunto: ${escapeHTML(contact.subject || 'Indisponível')}</p><p>Prévia: ${escapeHTML((contact.message || '').slice(0, 180))}</p>${previewHref ? `<p><a href="${escapeHTML(previewHref)}" target="_blank" rel="noopener noreferrer">Ver a prévia do site ↗</a></p>` : ''}${gmailControls}</div>` : '';
   const followup = state.gmail_followups?.[job.id] || {};
   const followupPanel = followup.available ? `<div class="gmail-panel"><div class="meta-label">Acompanhamento por e-mail</div><p>Primeiro envio: ${escapeHTML(time(followup.first_sent_at))}</p><p>Dia 4: ${escapeHTML(time(followup.day4_due_at))} · ${escapeHTML(label(followup.day4_status))}</p><p>Dia 10: ${escapeHTML(time(followup.day10_due_at))} · ${escapeHTML(label(followup.day10_status))}</p>${followup.next_touch ? `<p>${followup.due ? 'Follow-up disponível para revisão' : 'Próximo follow-up em ' + escapeHTML(time(followup.due_at))}</p><label class="meta-label" for="followup-message">Mensagem do dia ${followup.next_touch === 1 ? '4' : '10'}</label><textarea id="followup-message" readonly rows="7">${escapeHTML(followup.message)}</textarea>${followup.due && auth.authorized ? `<button type="button" id="gmail-followup" data-touch="${followup.next_touch}">Enviar follow-up na mesma conversa</button>` : ''}` : `<p>${escapeHTML(followup.reason || '')}</p>`}</div>` : '';
   const choices = current === 'prepared' ? '<option value="sent">Envio confirmado</option><option value="sent_external">Contato externo comprovado</option><option value="failed_no_send">Falhou sem envio</option><option value="uncertain">Resultado incerto</option><option value="opted_out">Não contatar</option>'
@@ -108,9 +111,28 @@ function commercialSection(job) {
     : current === 'uncertain' ? '<option value="opted_out">Não contatar</option>'
     : '<option value="replied">Respondeu</option><option value="interested">Interessado</option><option value="not_interested">Sem interesse</option><option value="opted_out">Não contatar</option>';
   const recordable = ['not_sent', 'pending', 'prepared', 'manual_required', 'sent', 'submitted', 'replied', 'interested', 'not_interested', 'uncertain'].includes(current);
-  const proofRequired = current === 'prepared' || ['not_sent', 'pending', 'manual_required'].includes(current);
-  const nextAction = { sent: 'Aguardar resposta', submitted: 'Aguardar resposta', replied: 'Avaliar a resposta', interested: 'Continuar a conversa manualmente', not_interested: 'Encerrar abordagem', opted_out: 'Não contatar', uncertain: 'Revisar o resultado antes de qualquer novo contato' }[current] || contact.next_action || 'Preparar mensagem após verificar a prévia e os contatos.';
-  return `<section class="dialog-section commercial-section"><h3>Contato comercial</h3><p>Canal: ${escapeHTML(label(contact.channel || 'pending'))} · Modelo: ${escapeHTML(contact.template || 'pendente')} · Status: ${escapeHTML(label(current))}</p>${contact.subject ? `<p><strong>Assunto:</strong> ${escapeHTML(contact.subject)}</p>` : ''}${contact.message ? `<label class="meta-label" for="commercial-message">Mensagem preparada</label><textarea id="commercial-message" readonly rows="10">${escapeHTML(contact.message)}</textarea><button type="button" id="copy-commercial">Copiar mensagem</button>` : ''}${gmailPanel}${followupPanel}${contact.whatsapp_url ? `<p><a href="${escapeHTML(contact.whatsapp_url)}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp com texto ↗</a> · abrir não registra envio</p>` : ''}<p>Próxima ação: ${escapeHTML(nextAction)}</p>${canPrepare ? `<button type="button" id="prepare-commercial">Preparar mensagem</button>` : ''}${recordable ? `<form id="commercial-record"><label>Status <select name="status">${choices}</select></label><label class="external-channel"${current === 'prepared' ? ' hidden' : ''}>Canal usado <select name="channel"><option value="">Selecione</option><option value="form">Formulário</option><option value="email">E-mail</option><option value="whatsapp_manual">WhatsApp manual</option></select></label><label class="send-proof"${proofRequired ? '' : ' hidden'}>Comprovante (URL, arquivo em runs/ ou id:...) <input name="proof"></label><label>Evidência observada <input name="evidence" required maxlength="1000"></label><button type="submit">Registrar resultado</button></form>` : ''}<p id="commercial-feedback" role="status"></p><div class="meta-label">Histórico de tentativas</div>${history ? `<ol class="timeline">${history}</ol>` : '<p>Nenhuma tentativa registrada.</p>'}</section>`;
+  const beforeContact = current === 'prepared' || ['not_sent', 'pending', 'manual_required'].includes(current);
+  const externalFields = beforeContact ? `<label class="external-channel"${current === 'prepared' ? ' hidden' : ''}>Canal usado <select name="channel"${current === 'prepared' ? '' : ' required'}><option value="">Selecione</option><option value="form">Formulário</option><option value="email">E-mail</option><option value="whatsapp_manual">WhatsApp manual</option></select></label><label class="send-proof">Comprovante (URL, arquivo em runs/ ou id:...) <input name="proof" required></label>` : '';
+  return `<section class="dialog-section commercial-section"><h3>Contato comercial</h3><p>Canal: ${escapeHTML(label(contact.channel || 'pending'))} · Modelo: ${escapeHTML(contact.template || 'pendente')} · Status: ${escapeHTML(label(current))}</p>${contact.subject ? `<p><strong>Assunto:</strong> ${escapeHTML(contact.subject)}</p>` : ''}${contact.message ? `<label class="meta-label" for="commercial-message">Mensagem preparada</label><textarea id="commercial-message" readonly rows="10">${escapeHTML(contact.message)}</textarea><button type="button" id="copy-commercial">Copiar mensagem</button>` : ''}${gmailPanel}${followupPanel}${contact.whatsapp_url ? `<p><a href="${escapeHTML(contact.whatsapp_url)}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp com texto ↗</a> · abrir não registra envio</p>` : ''}<p>Próxima ação: ${escapeHTML(nextCommercialAction(job))}</p>${canPrepare ? `<button type="button" id="prepare-commercial">Preparar mensagem</button>` : ''}${recordable ? `<form id="commercial-record"><label>Status <select name="status">${choices}</select></label>${externalFields}<label>Evidência observada <input name="evidence" required maxlength="1000"></label><button type="submit">Registrar resultado</button></form>` : ''}<p id="commercial-feedback" role="status"></p><div class="meta-label">Histórico de tentativas</div>${history ? `<ol class="timeline">${history}</ol>` : '<p>Nenhuma tentativa registrada.</p>'}</section>`;
+}
+function nextCommercialAction(job) {
+  const current = job.contact_status || 'not_sent';
+  return { sent: 'Aguardar resposta', submitted: 'Aguardar resposta', replied: 'Avaliar a resposta', interested: 'Continuar a conversa manualmente', not_interested: 'Encerrar abordagem', opted_out: 'Não contatar', uncertain: 'Reconciliar resultado antes de qualquer novo contato' }[current] || job.data?.commercial_contact?.next_action || 'Preparar mensagem após verificar a prévia e os contatos.';
+}
+function operationalDetail(job) {
+  const detail = job.detail || job.reason || '';
+  return job.data?.preview_verified === true && safeURL(job.preview_url) && (!detail || detail === 'Na fila') ? job.reason || '' : detail || 'Na fila';
+}
+function updateRecordFields(form, status) {
+  const channel = form.querySelector('.external-channel'), proof = form.querySelector('.send-proof');
+  if (channel) {
+    channel.hidden = status !== 'sent_external';
+    channel.querySelector('select').required = status === 'sent_external';
+  }
+  if (proof) {
+    proof.hidden = !['sent', 'sent_external'].includes(status);
+    proof.querySelector('input').required = !proof.hidden;
+  }
 }
 function productionCategory(job) {
   if (job.data?.preview_verified === true && safeURL(job.preview_url)) return 'ready';
@@ -144,6 +166,13 @@ function category(job) {
   if (['submitted', 'sent', 'replied', 'interested', 'not_interested', 'contacted'].includes(job.contact_status) || ['contacted', 'complete', 'completed', 'sent'].includes(job.stage)) return 'contacted';
   if (job.preview_url || ['published', 'deployed', 'ready'].includes(job.stage)) return 'ready';
   return 'working';
+}
+function jobCard(job, index) {
+  const initials = String(job.name || '?').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+  const followup = state.gmail_followups?.[job.id];
+  const followupHint = followup?.next_touch ? `<p class="job-detail">${followup.due ? `Follow-up do dia ${followup.next_touch === 1 ? '4' : '10'} para revisar` : `Próximo follow-up: ${escapeHTML(time(followup.due_at))}`}</p>` : '';
+  const detail = operationalDetail(job);
+  return `<button class="job-card${isManual(job) ? ' manual-card' : ''}" data-job="${escapeHTML(job.id)}" aria-label="Abrir detalhes de ${escapeHTML(job.name || 'empresa')}"><div class="job-cover"><span class="job-number">${String(index + 1).padStart(2, '0')}</span><span class="cover-monogram" aria-hidden="true">${escapeHTML(initials)}</span><span class="cover-caption">${job.preview_url ? 'Prévia ↗' : ''}</span></div><div class="job-info"><h3>${escapeHTML(job.name || 'Empresa sem nome')}</h3><div class="job-domain">${escapeHTML(job.domain || 'Sem site próprio registrado')}</div><p class="job-detail">${escapeHTML(job.data?.commercial_category || 'Sem categoria')} · ${escapeHTML(job.data?.opportunity_type || 'Tipo pendente')}</p><p class="job-detail">Contato: ${escapeHTML(label(job.contact_status || 'not_sent'))}</p><p class="job-detail">Próxima ação: ${escapeHTML(nextCommercialAction(job))}</p>${followupHint}${detail ? `<p class="job-detail">${escapeHTML(detail)}</p>` : ''}<div class="job-bottom"><span class="stage ${productionCategory(job)}">Produção: ${escapeHTML(production(job))}</span><span class="job-arrow" aria-hidden="true">↗</span></div></div></button>`;
 }
 function render() {
   const batches = state.batches;
@@ -182,12 +211,7 @@ function render() {
     const filtered = state.jobs.length > 0 && (batchFilter !== 'all' || stageFilter !== 'all');
     $('#jobs').innerHTML = `<div class="empty"><div><div class="empty-mark" aria-hidden="true">✳</div><h3>${filtered ? 'Nenhum resultado' : 'Nenhuma empresa ainda'}</h3><p>${filtered ? 'Tente outro filtro.' : 'Enfileire o primeiro lote acima.'}</p></div></div>`;
   } else {
-    $('#jobs').innerHTML = jobs.map((job, index) => {
-      const initials = String(job.name || '?').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
-      const followup = state.gmail_followups?.[job.id];
-      const followupHint = followup?.next_touch ? `<p class="job-detail">${followup.due ? `Follow-up do dia ${followup.next_touch === 1 ? '4' : '10'} para revisar` : `Próximo follow-up: ${escapeHTML(time(followup.due_at))}`}</p>` : '';
-      return `<button class="job-card${isManual(job) ? ' manual-card' : ''}" data-job="${escapeHTML(job.id)}" aria-label="Abrir detalhes de ${escapeHTML(job.name || 'empresa')}"><div class="job-cover"><span class="job-number">${String(index + 1).padStart(2, '0')}</span><span class="cover-monogram" aria-hidden="true">${escapeHTML(initials)}</span><span class="cover-caption">${job.preview_url ? 'Prévia ↗' : ''}</span></div><div class="job-info"><h3>${escapeHTML(job.name || 'Empresa sem nome')}</h3><div class="job-domain">${escapeHTML(job.domain || 'Sem site próprio registrado')}</div><p class="job-detail">${escapeHTML(job.data?.commercial_category || 'Sem categoria')} · ${escapeHTML(job.data?.opportunity_type || 'Tipo pendente')}</p><p class="job-detail">Contato: ${escapeHTML(label(job.contact_status || 'not_sent'))}</p>${followupHint}<p class="job-detail">${escapeHTML(job.detail || job.reason || 'Na fila')}</p><div class="job-bottom"><span class="stage ${productionCategory(job)}">${escapeHTML(production(job))}</span><span class="job-arrow" aria-hidden="true">↗</span></div></div></button>`;
-    }).join('');
+    $('#jobs').innerHTML = jobs.map(jobCard).join('');
   }
   if (selectedJob && $('#job-dialog').open) renderDialog();
 }
@@ -211,7 +235,7 @@ function renderDialog() {
   if (!job) return;
   const original = safeURL(job.url), preview = safeURL(job.preview_url);
   const events = state.events.filter(event => String(event.job_id) === String(job.id)).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  $('#dialog-content').innerHTML = `<h2 id="dialog-title">${escapeHTML(job.name)}</h2><span class="stage ${productionCategory(job)}">${escapeHTML(production(job))}</span><div class="dialog-links">${original ? `<a href="${escapeHTML(original)}" target="_blank" rel="noopener noreferrer">Original ↗</a>` : ''}${preview ? `<a class="preview" href="${escapeHTML(preview)}" target="_blank" rel="noopener noreferrer">Prévia ↗</a>` : ''}</div><section class="dialog-section"><div class="meta-label">Oportunidade</div><p>${escapeHTML(job.data?.commercial_category || 'Pendente')} · ${escapeHTML(job.data?.opportunity_type || 'Não definido')}</p><p>${escapeHTML(job.data?.commercial_reason || '')}</p><div class="meta-label">Produção</div><p>${escapeHTML(production(job))} · ${escapeHTML(job.data?.presence_status || 'Presença não verificada')}</p></section>${renderContacts(job.data?.contacts)}${commercialSection(job)}${manualOutreach(job)}${contactSimulation(job)}${operationSection(job)}<section class="dialog-section"><div class="meta-label">Andamento</div><p>${escapeHTML(job.detail || 'Aguardando atualização do coordenador.')}</p><div class="meta-label">Trabalhador · atualização</div><p>${escapeHTML(job.worker || 'Não atribuído')} / ${escapeHTML(time(job.updated_at))}</p></section>${job.reason ? `<section class="dialog-section"><div class="meta-label">Motivo</div><p>${escapeHTML(job.reason)}</p></section>` : ''}<section class="dialog-section"><div class="meta-label">Atividade</div>${events.length ? `<ol class="timeline">${events.map(event => `<li>${escapeHTML(event.message)}<time class="timeline-time">${escapeHTML(time(event.created_at))}</time></li>`).join('')}</ol>` : '<p>Nenhuma atividade registrada.</p>'}</section>`;
+  $('#dialog-content').innerHTML = `<h2 id="dialog-title">${escapeHTML(job.name)}</h2><span class="stage ${productionCategory(job)}">${escapeHTML(production(job))}</span><div class="dialog-links">${original ? `<a href="${escapeHTML(original)}" target="_blank" rel="noopener noreferrer">Original ↗</a>` : ''}${preview ? `<a class="preview" href="${escapeHTML(preview)}" target="_blank" rel="noopener noreferrer">Prévia ↗</a>` : ''}</div><section class="dialog-section"><div class="meta-label">Oportunidade</div><p>${escapeHTML(job.data?.commercial_category || 'Pendente')} · ${escapeHTML(job.data?.opportunity_type || 'Não definido')}</p><p>${escapeHTML(job.data?.commercial_reason || '')}</p><div class="meta-label">Produção</div><p>${escapeHTML(production(job))} · ${escapeHTML(job.data?.presence_status || 'Presença não verificada')}</p></section>${renderContacts(job.data?.contacts)}${commercialSection(job)}${manualOutreach(job)}${contactSimulation(job)}${operationSection(job)}<section class="dialog-section"><div class="meta-label">Andamento</div>${operationalDetail(job) ? `<p>${escapeHTML(operationalDetail(job))}</p>` : ''}<div class="meta-label">Trabalhador · atualização</div><p>${escapeHTML(job.worker || 'Não atribuído')} / ${escapeHTML(time(job.updated_at))}</p></section>${job.reason ? `<section class="dialog-section"><div class="meta-label">Motivo</div><p>${escapeHTML(job.reason)}</p></section>` : ''}<section class="dialog-section"><div class="meta-label">Atividade</div>${events.length ? `<ol class="timeline">${events.map(event => `<li>${escapeHTML(event.message)}<time class="timeline-time">${escapeHTML(time(event.created_at))}</time></li>`).join('')}</ol>` : '<p>Nenhuma atividade registrada.</p>'}</section>`;
 }
 async function poll() {
   try {
@@ -335,7 +359,7 @@ $('#dialog-content').addEventListener('click', async event => {
 $('#dialog-content').addEventListener('submit', async event => {
   if (event.target.id !== 'commercial-record') return;
   event.preventDefault();
-  const payload = {job_id:selectedJob, status:event.target.elements.status.value, evidence:event.target.elements.evidence.value, channel:event.target.elements.channel.value, proof:event.target.elements.proof.value};
+  const payload = {job_id:selectedJob, status:event.target.elements.status.value, evidence:event.target.elements.evidence.value, channel:event.target.elements.channel?.value || '', proof:event.target.elements.proof?.value || ''};
   try {
     const response = await fetch('/api/commercial/record', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
     const data = await response.json();
@@ -347,7 +371,5 @@ $('#dialog-content').addEventListener('submit', async event => {
 
 $('#dialog-content').addEventListener('change', event => {
   if (event.target.name !== 'status' || event.target.form?.id !== 'commercial-record') return;
-  const status = event.target.value, form = event.target.form;
-  form.querySelector('.external-channel').hidden = status !== 'sent_external';
-  form.querySelector('.send-proof').hidden = !['sent', 'sent_external'].includes(status);
+  updateRecordFields(event.target.form, event.target.value);
 });

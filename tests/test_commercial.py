@@ -144,6 +144,8 @@ class CommercialTests(unittest.TestCase):
             control.record_commercial(jid,'replied','Resposta sem contato')
         with self.assertRaisesRegex(ValueError,'channel'):
             control.record_commercial(jid,'sent_external','Envio fora do sistema',proof='id:message-12345678')
+        with self.assertRaisesRegex(ValueError,'reference'):
+            control.record_commercial(jid,'sent_external','Envio fora do sistema',channel='email')
         control.record_commercial(jid,'sent_external','Comprovante do contato feito fora do sistema',
                                   'email','https://example.org/comprovante')
         control.record_commercial(jid,'opted_out','Solicitou exclusão da lista')
