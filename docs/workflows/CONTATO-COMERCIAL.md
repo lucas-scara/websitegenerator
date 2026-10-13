@@ -1,6 +1,6 @@
 # Motor comercial determinístico
 
-Esta fase prepara mensagens e permite registrar resultados observados. Ela não envia formulários, e-mails ou WhatsApp. O lote de prévias continua concluído pela quantidade de URLs públicas verificadas, independentemente do estado comercial.
+Esta fase prepara mensagens e permite registrar resultados observados. O envio de e-mail preparado pelo Gmail é opcional e exige a configuração e a autorização local de [ENVIO-GMAIL.md](ENVIO-GMAIL.md). Não envia formulários nem WhatsApp. O lote de prévias continua concluído pela quantidade de URLs públicas verificadas, independentemente do estado comercial.
 
 ## Decisões
 
@@ -24,4 +24,4 @@ python3 tools/control.py commercial-record --job ID --status sent_external --cha
 python3 tools/control.py commercial-record --job ID --status failed_no_send --evidence 'Falha antes de qualquer envio...'
 ```
 
-Se o destino não tiver canal adequado, a preparação retorna `no_channel` e indica pesquisar contato público. Nenhum comando desta fase envia mensagens externas. Os comandos legados de envio de formulário seguem com autorização própria do lote e não são usados por este motor.
+Se o destino não tiver canal adequado, a preparação retorna `no_channel` e indica pesquisar contato público. `commercial-prepare` e `commercial-record` não enviam mensagens externas. O envio Gmail exige comando/ação separado e autorização específica. Os comandos legados de envio de formulário seguem com autorização própria do lote e não são usados por este motor.

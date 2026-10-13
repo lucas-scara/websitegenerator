@@ -1,6 +1,6 @@
 'use strict';
 const $ = (selector) => document.querySelector(selector);
-const state = { batches: [], jobs: [], events: [], workers: [], operations: [], stage_runs: [], templates: [], commercial_attempts: [], legacy_submissions: [], settings: { batch_size: 3, max_workers: 3 } };
+const state = { batches: [], jobs: [], events: [], workers: [], operations: [], stage_runs: [], templates: [], commercial_attempts: [], legacy_submissions: [], gmail_authorization: {}, settings: { batch_size: 3, max_workers: 3 } };
 let batchFilter = 'all', stageFilter = 'all', selectedJob = null, previousSignature = '', connected = false;
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const STAGES = { queued: 'Na fila', reviewing: 'Em análise', extracting: 'Coletando dados', building: 'Gerando', checking: 'Verificando', deploying: 'Publicando', ready: 'Prévia pronta', contacting: 'Tentativa de contato', complete: 'Contato efetuado', sent: 'Enviado', sent_external: 'Contato externo comprovado', uncertain: 'Resultado incerto', blocked: 'Bloqueado', skipped: 'Ignorado', manual: 'Contato manual', simulated: 'Simulado', pending: 'Pendente', prepared: 'Preparado', replied: 'Respondeu', interested: 'Interessado', not_interested: 'Sem interesse', opted_out: 'Não contatar', failed_no_send: 'Falha sem envio', whatsapp_manual: 'WhatsApp manual', no_channel: 'Sem canal', form: 'Formulário', email: 'E-mail', not_sent: 'Não enviado', attempting: 'Tentativa reservada', submitted: 'Enviado', manual_required: 'Contato manual necessário' };
@@ -95,9 +95,11 @@ function commercialSection(job) {
   const contact = job.data?.commercial_contact || {};
   const attempts = state.commercial_attempts.filter(item => item.job_id === job.id);
   const legacy = state.legacy_submissions.filter(item => item.job_id === job.id);
-  const history = attempts.map(item => `<li>${escapeHTML(label(item.channel))} · ${escapeHTML(label(item.status))} · ${escapeHTML(item.evidence)} <time>${escapeHTML(time(item.created_at))}</time></li>`).join('') + legacy.map(item => `<li>Formulário legado · ${escapeHTML(label(item.status))} · ${escapeHTML(item.evidence || '')}</li>`).join('');
+  const history = attempts.map(item => `<li>${escapeHTML(label(item.channel))} · ${escapeHTML(label(item.status))} · ${escapeHTML(item.evidence)}${item.gmail_message_id ? ` · Gmail ID: ${escapeHTML(item.gmail_message_id)}` : ''}${item.gmail_thread_id ? ` · Thread: ${escapeHTML(item.gmail_thread_id)}` : ''} <time>${escapeHTML(time(item.created_at))}</time></li>`).join('') + legacy.map(item => `<li>Formulário legado · ${escapeHTML(label(item.status))} · ${escapeHTML(item.evidence || '')}</li>`).join('');
   const current = job.contact_status || 'not_sent';
-  const canPrepare = job.data?.preview_verified === true && ['not_sent', 'pending', 'prepared', 'manual_required'].includes(current);
+  const canPrepare = job.data?.preview_verified === true && ['not_sent', 'pending', 'manual_required'].includes(current) && !contact.message;
+  const auth = state.gmail_authorization?.[job.id] || { mode: 'dry_run', authorized: false, reason: 'Autorização local ausente' };
+  const gmailPanel = contact.channel === 'email' && contact.message ? `<div class="gmail-panel"><div class="meta-label">Envio Gmail</div><p>Destinatário: ${escapeHTML(contact.destination || 'Indisponível')} · Remetente: ${escapeHTML(auth.sender || 'Não autorizado')}</p><p>Assunto: ${escapeHTML(contact.subject || 'Indisponível')}</p><p>Prévia: ${escapeHTML((contact.message || '').slice(0, 180))}</p><p>Autorização: ${escapeHTML(auth.mode)} · ${escapeHTML(auth.reason)}</p><button type="button" id="gmail-simulate">Simular envio</button>${auth.authorized && current === 'prepared' ? '<button type="button" id="gmail-send">Enviar via Gmail</button>' : ''}</div>` : '';
   const choices = current === 'prepared' ? '<option value="sent">Envio confirmado</option><option value="sent_external">Contato externo comprovado</option><option value="failed_no_send">Falhou sem envio</option><option value="uncertain">Resultado incerto</option><option value="opted_out">Não contatar</option>'
     : ['not_sent', 'pending', 'manual_required'].includes(current) ? '<option value="sent_external">Contato externo comprovado</option><option value="opted_out">Não contatar</option>'
     : current === 'uncertain' ? '<option value="opted_out">Não contatar</option>'
@@ -105,7 +107,7 @@ function commercialSection(job) {
   const recordable = ['not_sent', 'pending', 'prepared', 'manual_required', 'sent', 'submitted', 'replied', 'interested', 'not_interested', 'uncertain'].includes(current);
   const proofRequired = current === 'prepared' || ['not_sent', 'pending', 'manual_required'].includes(current);
   const nextAction = { sent: 'Aguardar resposta', submitted: 'Aguardar resposta', replied: 'Avaliar a resposta', interested: 'Continuar a conversa manualmente', not_interested: 'Encerrar abordagem', opted_out: 'Não contatar', uncertain: 'Revisar o resultado antes de qualquer novo contato' }[current] || contact.next_action || 'Preparar mensagem após verificar a prévia e os contatos.';
-  return `<section class="dialog-section commercial-section"><h3>Contato comercial</h3><p>Canal: ${escapeHTML(label(contact.channel || 'pending'))} · Modelo: ${escapeHTML(contact.template || 'pendente')} · Status: ${escapeHTML(label(current))}</p>${contact.subject ? `<p><strong>Assunto:</strong> ${escapeHTML(contact.subject)}</p>` : ''}${contact.message ? `<label class="meta-label" for="commercial-message">Mensagem preparada</label><textarea id="commercial-message" readonly rows="10">${escapeHTML(contact.message)}</textarea><button type="button" id="copy-commercial">Copiar mensagem</button>` : ''}${contact.whatsapp_url ? `<p><a href="${escapeHTML(contact.whatsapp_url)}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp com texto ↗</a> · abrir não registra envio</p>` : ''}<p>Próxima ação: ${escapeHTML(nextAction)}</p>${canPrepare ? `<button type="button" id="prepare-commercial">Preparar mensagem</button>` : ''}${recordable ? `<form id="commercial-record"><label>Status <select name="status">${choices}</select></label><label class="external-channel"${current === 'prepared' ? ' hidden' : ''}>Canal usado <select name="channel"><option value="">Selecione</option><option value="form">Formulário</option><option value="email">E-mail</option><option value="whatsapp_manual">WhatsApp manual</option></select></label><label class="send-proof"${proofRequired ? '' : ' hidden'}>Comprovante (URL, arquivo em runs/ ou id:...) <input name="proof"></label><label>Evidência observada <input name="evidence" required maxlength="1000"></label><button type="submit">Registrar resultado</button></form>` : ''}<p id="commercial-feedback" role="status"></p><div class="meta-label">Histórico de tentativas</div>${history ? `<ol class="timeline">${history}</ol>` : '<p>Nenhuma tentativa registrada.</p>'}</section>`;
+  return `<section class="dialog-section commercial-section"><h3>Contato comercial</h3><p>Canal: ${escapeHTML(label(contact.channel || 'pending'))} · Modelo: ${escapeHTML(contact.template || 'pendente')} · Status: ${escapeHTML(label(current))}</p>${contact.subject ? `<p><strong>Assunto:</strong> ${escapeHTML(contact.subject)}</p>` : ''}${contact.message ? `<label class="meta-label" for="commercial-message">Mensagem preparada</label><textarea id="commercial-message" readonly rows="10">${escapeHTML(contact.message)}</textarea><button type="button" id="copy-commercial">Copiar mensagem</button>` : ''}${gmailPanel}${contact.whatsapp_url ? `<p><a href="${escapeHTML(contact.whatsapp_url)}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp com texto ↗</a> · abrir não registra envio</p>` : ''}<p>Próxima ação: ${escapeHTML(nextAction)}</p>${canPrepare ? `<button type="button" id="prepare-commercial">Preparar mensagem</button>` : ''}${recordable ? `<form id="commercial-record"><label>Status <select name="status">${choices}</select></label><label class="external-channel"${current === 'prepared' ? ' hidden' : ''}>Canal usado <select name="channel"><option value="">Selecione</option><option value="form">Formulário</option><option value="email">E-mail</option><option value="whatsapp_manual">WhatsApp manual</option></select></label><label class="send-proof"${proofRequired ? '' : ' hidden'}>Comprovante (URL, arquivo em runs/ ou id:...) <input name="proof"></label><label>Evidência observada <input name="evidence" required maxlength="1000"></label><button type="submit">Registrar resultado</button></form>` : ''}<p id="commercial-feedback" role="status"></p><div class="meta-label">Histórico de tentativas</div>${history ? `<ol class="timeline">${history}</ol>` : '<p>Nenhuma tentativa registrada.</p>'}</section>`;
 }
 function productionCategory(job) {
   if (job.data?.preview_verified === true && safeURL(job.preview_url)) return 'ready';
@@ -213,6 +215,7 @@ async function poll() {
     const data = await response.json();
     for (const key of ['batches', 'jobs', 'events', 'workers', 'operations', 'stage_runs', 'templates', 'commercial_attempts', 'legacy_submissions']) state[key] = Array.isArray(data[key]) ? data[key] : [];
     state.settings = data.settings || state.settings;
+    state.gmail_authorization = data.gmail_authorization || {};
     const choices = '<option value="">Selecione o segmento</option><option value="all">Todos os segmentos</option>' + state.templates.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join('');
     const segmentSelect = $('#batch-form').elements.industry;
     if (segmentSelect.dataset.choices !== choices) { const value = segmentSelect.value; segmentSelect.innerHTML = choices; segmentSelect.value = value; segmentSelect.dataset.choices = choices; }
@@ -260,6 +263,20 @@ $('#jobs').addEventListener('click', event => {
   selectedJob = card.dataset.job; renderDialog(); $('#job-dialog').showModal();
 });
 $('#dialog-content').addEventListener('click', async event => {
+  if (event.target.id === 'gmail-simulate' || event.target.id === 'gmail-send') {
+    const button = event.target;
+    button.disabled = true;
+    try {
+      const route = button.id === 'gmail-send' ? 'gmail-send' : 'gmail-simulate';
+      const response = await fetch(`/api/commercial/${route}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({job_id:selectedJob})});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      $('#commercial-feedback').textContent = route === 'gmail-simulate' ? 'Simulação concluída; nenhum e-mail enviado.' : `Resultado: ${data.status}${data.gmail_message_id ? ' · Gmail ID: ' + data.gmail_message_id : ''}`;
+      previousSignature = '';
+    } catch (error) { $('#commercial-feedback').textContent = error.message; }
+    finally { button.disabled = false; }
+    return;
+  }
   const copyPhone = event.target.closest('.copy-phone');
   if (copyPhone) {
     const status = copyPhone.nextElementSibling;
