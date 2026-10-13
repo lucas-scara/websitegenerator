@@ -35,6 +35,141 @@ class CommercialTests(unittest.TestCase):
                         ('ready','https://preview.example',json.dumps(data),jid))
         return jid
 
+    def valid_email_contacts(self):
+        checked = control.now()[:10]
+        return {'email': {'status':'encontrado', 'value':'public@example.org', 'source':'https://example.org/contato', 'checked_at':checked},
+                'form': {'status':'nao_encontrado', 'source':'https://example.org/contato', 'checked_at':checked}}
+
+    def add_old_phone(self, jid):
+        with control.connect() as con:
+            data = json.loads(con.execute('SELECT data FROM jobs WHERE id=?', (jid,)).fetchone()['data'])
+            data['commercial_contact']['message'] += '\n+55 11 90000-0000'
+            con.execute('UPDATE jobs SET data=? WHERE id=?', (json.dumps(data), jid))
+        return data['commercial_contact']['message']
+
+    def test_explicit_regeneration_preserves_route_and_audit(self):
+        jid = self.job(contacts=self.valid_email_contacts())
+        original = control.prepare_commercial(jid)
+        old_message = self.add_old_phone(jid)
+        before = control.snapshot()
+        self.assertTrue(before['jobs'][0]['commercial_requires_review'])
+        self.assertTrue(before['jobs'][0]['commercial_can_regenerate'])
+        with self.assertRaisesRegex(ValueError, 'already prepared'):
+            control.prepare_commercial(jid)
+        refreshed = control.regenerate_commercial(jid)
+        self.assertEqual((refreshed['channel'], refreshed['destination']), (original['channel'], original['destination']))
+        self.assertEqual(refreshed['message'], original['message'])
+        self.assertFalse(commercial.message_has_phone(refreshed['message']))
+        after = control.snapshot()
+        self.assertFalse(after['jobs'][0]['commercial_requires_review'])
+        self.assertFalse(after['jobs'][0]['commercial_can_regenerate'])
+        self.assertEqual(after['jobs'][0]['contact_status'], 'prepared')
+        self.assertEqual(after['commercial_attempts'], before['commercial_attempts'])
+        self.assertIn('prior_sha256=', after['events'][0]['message'])
+        self.assertIn('new_sha256=', after['events'][0]['message'])
+        self.assertNotIn(old_message, after['events'][0]['message'])
+        with self.assertRaisesRegex(ValueError, 'Only a prepared message'):
+            control.regenerate_commercial(jid)
+
+    def test_regeneration_rejects_changed_route_and_invalid_preview_or_contacts(self):
+        jid = self.job(contacts=self.valid_email_contacts())
+        control.prepare_commercial(jid)
+        old_message = self.add_old_phone(jid)
+        with control.connect() as con:
+            data = json.loads(con.execute('SELECT data FROM jobs WHERE id=?',(jid,)).fetchone()['data'])
+            data['contacts']['email']['value'] = 'changed@example.org'
+            con.execute('UPDATE jobs SET data=? WHERE id=?',(json.dumps(data),jid))
+        self.assertFalse(control.snapshot()['jobs'][0]['commercial_can_regenerate'])
+        with self.assertRaisesRegex(ValueError, 'channel and recipient'):
+            control.regenerate_commercial(jid)
+        with control.connect() as con:
+            data['contacts']['email']['value'] = 'public@example.org'
+            data['contacts']['email']['source'] = ''
+            con.execute('UPDATE jobs SET data=? WHERE id=?',(json.dumps(data),jid))
+        with self.assertRaisesRegex(ValueError, 'contacts'):
+            control.regenerate_commercial(jid)
+        with control.connect() as con:
+            data['contacts']['email']['source'] = 'https://example.org/contato'
+            con.execute('UPDATE jobs SET preview_url=?,data=? WHERE id=?', ('http://preview.example',json.dumps(data),jid))
+        with self.assertRaisesRegex(ValueError, 'verified public preview'):
+            control.regenerate_commercial(jid)
+        self.assertEqual(control.snapshot()['jobs'][0]['data']['commercial_contact']['message'], old_message)
+
+    def test_regeneration_rejects_sent_uncertain_pending_and_optout_history(self):
+        for prior_status in ('sent', 'uncertain', 'attempting', 'opted_out', 'failed_no_send'):
+            with self.subTest(status=prior_status):
+                jid = self.job(contacts=self.valid_email_contacts())
+                control.prepare_commercial(jid)
+                old_message = self.add_old_phone(jid)
+                with control.connect() as con:
+                    con.execute('INSERT INTO commercial_attempts(job_id,channel,status,message,evidence,created_at) VALUES(?,?,?,?,?,?)',
+                                (jid,'email',prior_status,old_message,'Histórico preservado',control.now()))
+                before = control.snapshot()
+                with self.assertRaisesRegex(ValueError, 'attempt|recipient'):
+                    control.regenerate_commercial(jid)
+                after = control.snapshot()
+                self.assertEqual(after['jobs'][0]['data']['commercial_contact']['message'],old_message)
+                self.assertEqual(after['commercial_attempts'],before['commercial_attempts'])
+                self.assertFalse(after['jobs'][0]['commercial_can_regenerate'])
+
+    def test_regeneration_keeps_prior_failed_attempt_and_email_priority(self):
+        contacts = self.valid_email_contacts()
+        contacts['form'] = {'status':'encontrado', 'eligible':True, 'purpose':'contato comercial',
+                            'url':'https://example.org/form', 'source':'https://example.org/form',
+                            'checked_at':control.now()[:10], 'restrictions':[]}
+        jid = self.job(contacts=contacts)
+        self.assertEqual(control.prepare_commercial(jid)['channel'], 'form')
+        control.record_commercial(jid, 'failed_no_send', 'Falhou antes do envio')
+        prepared = control.prepare_commercial(jid)
+        self.assertEqual(prepared['channel'], 'email')
+        self.add_old_phone(jid)
+        prior = control.snapshot()['commercial_attempts']
+        regenerated = control.regenerate_commercial(jid)
+        self.assertEqual((regenerated['channel'],regenerated['destination']), ('email','public@example.org'))
+        self.assertEqual(control.snapshot()['commercial_attempts'],prior)
+
+    def test_regeneration_rejects_legacy_submission(self):
+        jid = self.job(contacts=self.valid_email_contacts())
+        control.prepare_commercial(jid)
+        old_message = self.add_old_phone(jid)
+        with control.connect() as con:
+            con.execute('INSERT INTO submissions VALUES(?,?,?,?,?,?,?)',
+                        (jid,old_message,'old-hash','https://example.org/form','attempting',None,control.now()))
+        with self.assertRaisesRegex(ValueError, 'submission'):
+            control.regenerate_commercial(jid)
+        state = control.snapshot()
+        self.assertEqual(state['jobs'][0]['data']['commercial_contact']['message'],old_message)
+        self.assertFalse(state['jobs'][0]['commercial_can_regenerate'])
+
+    def test_regeneration_uses_current_redesign_and_inoperante_models(self):
+        for presence in ('site_confirmado', 'site_inoperante'):
+            with self.subTest(presence=presence):
+                jid = self.job(presence=presence, contacts=self.valid_email_contacts())
+                observation = ''
+                if presence == 'site_inoperante':
+                    observation = 'HTTP 503 em duas tentativas'
+                    with control.connect() as con:
+                        data = json.loads(con.execute('SELECT data FROM jobs WHERE id=?',(jid,)).fetchone()['data'])
+                        data['verification']['technical_failure'] = {'checked_at':control.now()[:10],
+                            'source':'https://example.org/site', 'result':observation, 'attempts':2}
+                        con.execute('UPDATE jobs SET data=? WHERE id=?',(json.dumps(data),jid))
+                expected = control.prepare_commercial(jid, observation)
+                self.add_old_phone(jid)
+                regenerated = control.regenerate_commercial(jid)
+                self.assertEqual(regenerated['template'],expected['template'])
+                self.assertEqual(regenerated['message'],expected['message'])
+                self.assertFalse(commercial.message_has_phone(regenerated['message']))
+
+    def test_regeneration_never_changes_a_confirmed_send(self):
+        jid = self.job(contacts=self.valid_email_contacts())
+        control.prepare_commercial(jid)
+        old_message = self.add_old_phone(jid)
+        with control.connect() as con:
+            con.execute('UPDATE jobs SET contact_status=? WHERE id=?', ('sent',jid))
+        with self.assertRaisesRegex(ValueError, 'Only a prepared message'):
+            control.regenerate_commercial(jid)
+        self.assertEqual(control.snapshot()['jobs'][0]['data']['commercial_contact']['message'],old_message)
+
     def test_catalog_all_segments_and_messages(self):
         self.assertEqual(set(commercial.SEARCHES), set(control.TEMPLATES))
         values = {'empresa':'Empresa Exemplo','cidade':'Bauru','segmento':'chaveiro',

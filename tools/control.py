@@ -300,6 +300,7 @@ def snapshot():
                    'contact_simulation' if j['stage'] == 'simulated' else None)
             j['commercial_requires_review'] = commercial.message_has_phone(
                 (j['data'].get(key) or {}).get('message')) if key else False
+            j['commercial_can_regenerate'] = regeneration_block(c, j, j['data']) is None
         out['commercial_attempts'] = [dict(r) for r in c.execute('SELECT * FROM commercial_attempts ORDER BY id DESC')]
         out['gmail_authorization'] = {}
         out['gmail_followups'] = {}
@@ -891,17 +892,65 @@ def manual_outreach(jid, worker, reason, message, email='', phone=''):
         event(c, jid, 'Manual outreach required: ' + reason.strip())
         return {'id': jid, 'stage': 'manual', 'contact_status': 'manual_required'}
 
-def prepare_commercial(jid, observation=''):
+def regeneration_block(c, job, data):
+    """Return why an old, unsent prepared message cannot be safely replaced."""
+    prepared = data.get('commercial_contact') or {}
+    if job['contact_status'] != 'prepared' or not isinstance(prepared, dict) or not commercial.message_has_phone(prepared.get('message')):
+        return 'Only a prepared message containing a phone number can be regenerated'
+    if data.get('preview_verified') is not True or not isinstance(job['preview_url'], str) or not job['preview_url'].startswith('https://'):
+        return 'A verified public preview is required'
+    try: domain(job['preview_url'])
+    except ValueError: return 'A verified public preview is required'
+    email = os.environ.get('BR_COMMERCIAL_EMAIL', '').strip()
+    if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+        return 'Approved commercial email must be configured locally'
+    try: validate_contacts(data.get('contacts'))
+    except (TypeError, ValueError): return 'Verified commercial contacts are required'
+    if c.execute('SELECT 1 FROM submissions WHERE job_id=?', (job['id'],)).fetchone():
+        return 'A prior or pending submission prevents regeneration'
+    attempts = list(c.execute('SELECT channel,status FROM commercial_attempts WHERE job_id=?', (job['id'],)))
+    if any(row['status'] != 'failed_no_send' for row in attempts):
+        return 'A sent, uncertain, pending or opted-out attempt prevents regeneration'
+    excluded = [row['channel'] for row in attempts]
+    channel, destination = commercial.route(data.get('contacts'), excluded)
+    if channel == 'no_channel' or (channel, destination) != (prepared.get('channel'), prepared.get('destination')):
+        return 'The prepared channel and recipient are no longer eligible'
+    if data.get('template') not in commercial.SEARCHES or data.get('presence_status') not in ('sem_site_confirmado', 'site_confirmado', 'site_inoperante'):
+        return 'The commercial template is no longer valid'
+    if data.get('presence_status') == 'site_inoperante':
+        verification = data.get('verification') or {}
+        failure = (verification.get('technical_failure') or {}) if isinstance(verification, dict) else {}
+        if not isinstance(failure, dict): return 'Recent technical evidence is required'
+        try: recent = (dt.datetime.now(dt.timezone.utc).date() - dt.date.fromisoformat(failure.get('checked_at', ''))).days in range(0, 15)
+        except (TypeError, ValueError): recent = False
+        if (not recent or not isinstance(failure.get('source'), str) or not failure['source'].startswith(('https://', 'http://'))
+                or not isinstance(failure.get('result'), str) or not failure['result'].strip()
+                or type(failure.get('attempts')) is not int or failure['attempts'] < 2):
+            return 'Recent technical evidence is required'
+    return None
+
+def regenerate_commercial(jid):
+    """Explicitly replace an unsent legacy message using current deterministic copy."""
+    return prepare_commercial(jid, regenerate=True)
+
+def prepare_commercial(jid, observation='', *, regenerate=False):
     """Prepare copy only. No external request or production transition occurs."""
     with connect() as c:
         job = c.execute('SELECT * FROM jobs WHERE id=?', (jid,)).fetchone()
         if not job: raise ValueError('Unknown job')
         data = json.loads(job['data'])
+        old_prepared = data.get('commercial_contact') or {}
+        previous = old_prepared.get('message') if regenerate and isinstance(old_prepared, dict) else None
+        if regenerate:
+            blocked = regeneration_block(c, job, data)
+            if blocked: raise ValueError(blocked)
+            if data.get('presence_status') == 'site_inoperante':
+                observation = data['verification']['technical_failure']['result']
         if data.get('preview_verified') is not True or not job['preview_url'].startswith('https://'):
             raise ValueError('A verified public preview is required')
         if job['contact_status'] in ('opted_out','not_interested','uncertain','sent','submitted','replied','interested','attempting'):
             raise ValueError('Commercial contact is already resolved or requires review')
-        if job['contact_status'] == 'prepared' and (data.get('commercial_contact') or {}).get('message'):
+        if not regenerate and job['contact_status'] == 'prepared' and (data.get('commercial_contact') or {}).get('message'):
             raise ValueError('A commercial message is already prepared; review it before recording a result')
         if c.execute('SELECT 1 FROM submissions WHERE job_id=?', (jid,)).fetchone():
             raise ValueError('Legacy submission exists; review before preparing')
@@ -910,6 +959,8 @@ def prepare_commercial(jid, observation=''):
             raise ValueError('Prior attempt prevents preparation')
         failed = [row['channel'] for row in c.execute("SELECT channel FROM commercial_attempts WHERE job_id=? AND status='failed_no_send'", (jid,))]
         channel, destination = commercial.route(data.get('contacts'), failed)
+        if regenerate and (channel, destination) != (data['commercial_contact']['channel'], data['commercial_contact']['destination']):
+            raise ValueError('The prepared channel and recipient are no longer eligible')
         if channel == 'no_channel':
             data['commercial_contact'] = {'channel': channel, 'next_action': 'Pesquisar contato público adequado'}
             c.execute('UPDATE jobs SET data=?,contact_status=?,updated_at=? WHERE id=?', (json.dumps(data), 'pending', now(), jid))
@@ -953,7 +1004,12 @@ def prepare_commercial(jid, observation=''):
         if channel == 'whatsapp_manual': prepared['whatsapp_url'] = commercial.whatsapp_link(destination, message)
         data['commercial_contact'] = prepared
         c.execute('UPDATE jobs SET data=?,contact_status=?,updated_at=? WHERE id=?', (json.dumps(data, ensure_ascii=False), 'prepared', now(), jid))
-        event(c, jid, 'Commercial message prepared; no contact sent.')
+        if regenerate:
+            old_hash = hashlib.sha256(previous.encode('utf-8')).hexdigest()
+            new_hash = hashlib.sha256(message.encode('utf-8')).hexdigest()
+            event(c, jid, f'Commercial message regenerated without phone; prior_sha256={old_hash}; new_sha256={new_hash}; no contact sent.')
+        else:
+            event(c, jid, 'Commercial message prepared; no contact sent.')
         return prepared
 
 def require_commercial_identity(message):
@@ -1091,13 +1147,15 @@ def serve(port):
             origin=self.headers.get('Origin')
             if not self.valid_host() or origin not in (f'http://127.0.0.1:{self.server.server_port}',f'http://localhost:{self.server.server_port}'):
                 return self.send(403,{'error':'Same-origin browser request required'})
-            if self.path not in ('/api/batches','/api/sites','/api/commercial/prepare','/api/commercial/record','/api/commercial/gmail-simulate','/api/commercial/gmail-send','/api/commercial/gmail-followup'): return self.send(404,{'error':'Not found'})
+            if self.path not in ('/api/batches','/api/sites','/api/commercial/prepare','/api/commercial/regenerate','/api/commercial/record','/api/commercial/gmail-simulate','/api/commercial/gmail-send','/api/commercial/gmail-followup'): return self.send(404,{'error':'Not found'})
             try:
                 size=int(self.headers.get('Content-Length','0'))
                 if size<1 or size>8192 or self.headers.get_content_type()!='application/json': raise ValueError('JSON body required (8 KB maximum)')
                 data=json.loads(self.rfile.read(size))
                 if self.path=='/api/commercial/prepare':
                     self.send(200,prepare_commercial(data.get('job_id'),data.get('observation','')))
+                elif self.path=='/api/commercial/regenerate':
+                    self.send(200,regenerate_commercial(data.get('job_id')))
                 elif self.path=='/api/commercial/record':
                     self.send(200,record_commercial(data.get('job_id'),data.get('status'),data.get('evidence',''),data.get('channel',''),data.get('proof','')))
                 elif self.path=='/api/commercial/gmail-simulate':
@@ -1137,6 +1195,7 @@ def main():
     s=sub.add_parser('contact-finish'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--status',choices=['submitted','sent','uncertain','blocked'],required=True); s.add_argument('--evidence',required=True)
     s=sub.add_parser('manual-outreach'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--reason',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--email',default=''); s.add_argument('--phone',default='')
     s=sub.add_parser('commercial-prepare'); s.add_argument('--job',required=True); s.add_argument('--observation',default='')
+    s=sub.add_parser('commercial-regenerate'); s.add_argument('--job',required=True)
     s=sub.add_parser('commercial-record'); s.add_argument('--job',required=True); s.add_argument('--status',choices=['sent','sent_external','uncertain','failed_no_send','replied','interested','not_interested','opted_out'],required=True); s.add_argument('--evidence',required=True); s.add_argument('--channel',choices=['form','email','whatsapp_manual'],default=''); s.add_argument('--proof',default='')
     s=sub.add_parser('gmail-auth')
     s=sub.add_parser('gmail-simulate'); s.add_argument('--job',required=True)
@@ -1163,6 +1222,7 @@ def main():
         elif a.cmd=='contact-finish': result=contact_finish(a.job,a.worker,a.status,a.evidence)
         elif a.cmd=='manual-outreach': result=manual_outreach(a.job,a.worker,a.reason,a.message_file.read_text(),a.email,a.phone)
         elif a.cmd=='commercial-prepare': result=prepare_commercial(a.job,a.observation)
+        elif a.cmd=='commercial-regenerate': result=regenerate_commercial(a.job)
         elif a.cmd=='commercial-record': result=record_commercial(a.job,a.status,a.evidence,a.channel,a.proof)
         elif a.cmd=='gmail-auth': result=gmail_outreach.authenticate(gmail_ledger())
         elif a.cmd=='gmail-simulate': result=gmail_outreach.simulate(gmail_ledger(),a.job)

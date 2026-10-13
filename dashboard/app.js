@@ -98,6 +98,7 @@ function commercialSection(job) {
   const history = attempts.map(item => `<li>${escapeHTML(label(item.channel))} · ${escapeHTML(label(item.status))} · ${escapeHTML(item.evidence)}${item.gmail_message_id ? ` · Gmail ID: ${escapeHTML(item.gmail_message_id)}` : ''}${item.gmail_thread_id ? ` · Thread: ${escapeHTML(item.gmail_thread_id)}` : ''} <time>${escapeHTML(time(item.created_at))}</time></li>`).join('') + legacy.map(item => `<li>Formulário legado · ${escapeHTML(label(item.status))} · ${escapeHTML(item.evidence || '')}</li>`).join('');
   const current = job.contact_status || 'not_sent';
   const requiresReview = job.commercial_requires_review === true;
+  const canRegenerate = requiresReview && current === 'prepared' && Boolean(contact.message) && job.commercial_can_regenerate === true;
   const canPrepare = job.data?.preview_verified === true && ['not_sent', 'pending', 'manual_required'].includes(current) && !contact.message;
   const auth = state.gmail_authorization?.[job.id] || { mode: 'dry_run', authorized: false, reason: 'Autorização local ausente' };
   const previewHref = safeURL(job.preview_url);
@@ -114,7 +115,7 @@ function commercialSection(job) {
   const recordable = ['not_sent', 'pending', 'prepared', 'manual_required', 'sent', 'submitted', 'replied', 'interested', 'not_interested', 'uncertain'].includes(current);
   const beforeContact = current === 'prepared' || ['not_sent', 'pending', 'manual_required'].includes(current);
   const externalFields = beforeContact ? `<label class="external-channel"${current === 'prepared' ? ' hidden' : ''}>Canal usado <select name="channel"${current === 'prepared' ? '' : ' required'}><option value="">Selecione</option><option value="form">Formulário</option><option value="email">E-mail</option><option value="whatsapp_manual">WhatsApp manual</option></select></label><label class="send-proof">Comprovante (URL, arquivo em runs/ ou id:...) <input name="proof" required></label>` : '';
-  return `<section class="dialog-section commercial-section"><h3>Contato comercial</h3><p>Canal: ${escapeHTML(label(contact.channel || 'pending'))} · Modelo: ${escapeHTML(contact.template || 'pendente')} · Status: ${escapeHTML(label(current))}</p>${requiresReview ? '<p>Mensagem com número de telefone: revise antes de qualquer envio. As ações de envio e cópia estão bloqueadas.</p>' : ''}${contact.subject ? `<p><strong>Assunto:</strong> ${escapeHTML(contact.subject)}</p>` : ''}${contact.message ? `<label class="meta-label" for="commercial-message">Mensagem preparada</label><textarea id="commercial-message" readonly rows="10">${escapeHTML(contact.message)}</textarea>${requiresReview ? '' : '<button type="button" id="copy-commercial">Copiar mensagem</button>'}` : ''}${gmailPanel}${followupPanel}${contact.whatsapp_url && !requiresReview ? `<p><a href="${escapeHTML(contact.whatsapp_url)}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp com texto ↗</a> · abrir não registra envio</p>` : ''}<p>Próxima ação: ${escapeHTML(nextCommercialAction(job))}</p>${canPrepare ? `<button type="button" id="prepare-commercial">Preparar mensagem</button>` : ''}${recordable ? `<form id="commercial-record"><label>Status <select name="status">${choices}</select></label>${externalFields}<label>Evidência observada <input name="evidence" required maxlength="1000"></label><button type="submit">Registrar resultado</button></form>` : ''}<p id="commercial-feedback" role="status"></p><div class="meta-label">Histórico de tentativas</div>${history ? `<ol class="timeline">${history}</ol>` : '<p>Nenhuma tentativa registrada.</p>'}</section>`;
+  return `<section class="dialog-section commercial-section"><h3>Contato comercial</h3><p>Canal: ${escapeHTML(label(contact.channel || 'pending'))} · Modelo: ${escapeHTML(contact.template || 'pendente')} · Status: ${escapeHTML(label(current))}</p>${requiresReview ? '<p>Mensagem com número de telefone: revise antes de qualquer envio. As ações de envio e cópia estão bloqueadas.</p>' : ''}${contact.subject ? `<p><strong>Assunto:</strong> ${escapeHTML(contact.subject)}</p>` : ''}${contact.message ? `<label class="meta-label" for="commercial-message">Mensagem preparada</label><textarea id="commercial-message" readonly rows="10">${escapeHTML(contact.message)}</textarea>${requiresReview ? '' : '<button type="button" id="copy-commercial">Copiar mensagem</button>'}` : ''}${gmailPanel}${followupPanel}${contact.whatsapp_url && !requiresReview ? `<p><a href="${escapeHTML(contact.whatsapp_url)}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp com texto ↗</a> · abrir não registra envio</p>` : ''}${canRegenerate ? '<button type="button" id="regenerate-commercial">Regenerar mensagem sem telefone</button>' : ''}<p>Próxima ação: ${escapeHTML(nextCommercialAction(job))}</p>${canPrepare ? `<button type="button" id="prepare-commercial">Preparar mensagem</button>` : ''}${recordable ? `<form id="commercial-record"><label>Status <select name="status">${choices}</select></label>${externalFields}<label>Evidência observada <input name="evidence" required maxlength="1000"></label><button type="submit">Registrar resultado</button></form>` : ''}<p id="commercial-feedback" role="status"></p><div class="meta-label">Histórico de tentativas</div>${history ? `<ol class="timeline">${history}</ol>` : '<p>Nenhuma tentativa registrada.</p>'}</section>`;
 }
 function nextCommercialAction(job) {
   const current = job.contact_status || 'not_sent';
@@ -339,6 +340,19 @@ render(); poll();
 setInterval(refreshWorkerAges, 10000);
 
 $('#dialog-content').addEventListener('click', async event => {
+  if (event.target.id === 'regenerate-commercial') {
+    const button = event.target;
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/commercial/regenerate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({job_id:selectedJob})});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível regenerar a mensagem.');
+      $('#commercial-feedback').textContent = 'Mensagem regenerada sem telefone. Nenhum contato foi enviado.';
+      previousSignature = '';
+    } catch (error) { $('#commercial-feedback').textContent = error.message; }
+    finally { button.disabled = false; }
+    return;
+  }
   if (event.target.id === 'copy-commercial') {
     const field = $('#commercial-message');
     try { await navigator.clipboard.writeText(field.value); $('#commercial-feedback').textContent = 'Mensagem copiada.'; }
