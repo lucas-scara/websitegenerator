@@ -1,6 +1,7 @@
 """Deterministic, offline commercial copy and channel selection."""
 import re
 import datetime as dt
+from html import escape
 from urllib.parse import quote, urlsplit
 
 SEARCHES = {
@@ -15,19 +16,19 @@ SEARCHES = {
 ALLOWED = {'empresa','cidade','segmento','busca_exemplo','preview_url','observacao_verificada','assinatura','email_comercial','telefone_comercial'}
 COPY = {
     'primeiro_site': {
-        'subject': 'Uma proposta visual para {empresa}',
+        'subject': 'Preparei uma ideia de site para a {empresa}',
         'short': "Olá! Sou Lucas, da scarasoft. Quem procura {segmento} pode buscar, por exemplo, '{busca_exemplo}'. Um site profissional ajuda a conhecer os serviços da {empresa}, transmite confiança e facilita o contato. Veja a prévia demonstrativa: {preview_url}\nÉ independente, não oficial e sem compromisso. O que achou?",
-        'full': "Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Quem precisa de {segmento} pode pesquisar, por exemplo, '{busca_exemplo}'. Um site profissional ajuda a conhecer os serviços da {empresa}, transmite confiança na primeira impressão e facilita o contato.\n\nPreparamos esta prévia demonstrativa:\n{preview_url}\n\nEla é independente, não oficial e sem compromisso. Gostaria de saber o que achou!\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}",
+        'full': "Olá! Tudo bem?\n\nSou Lucas, da scarasoft, aqui de Bauru.\n\nConheci a {empresa} e tive uma ideia de como apresentar seus serviços de forma mais profissional na internet, facilitando que novos clientes encontrem a empresa e peçam orçamentos.\n\nPreparei uma prévia de site especialmente para a {empresa}:\nVer a prévia do site\n\nÉ apenas uma demonstração independente, sem vínculo com a empresa e sem compromisso.\n\nSe gostar da ideia, posso te explicar como colocar esse site no ar. Faz sentido para vocês?\n\nAbraço,\nLucas Scaranello\nscarasoft\n{email_comercial}\n{telefone_comercial}",
     },
     'redesign': {
-        'subject': 'Proposta visual para {empresa}',
+        'subject': 'Uma ideia para modernizar o site da {empresa}',
         'short': "Olá! Sou Lucas, da scarasoft. Quem busca, por exemplo, '{busca_exemplo}' pode conhecer a {empresa} pelo site. Uma apresentação profissional ajuda a descobrir os serviços, transmite confiança e facilita o contato. Preparei uma prévia renovada: {preview_url}\nÉ demonstrativa, independente e não oficial; não altera o site atual. O que achou?",
-        'full': "Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Conheci a {empresa} e seu site. Quem busca, por exemplo, '{busca_exemplo}' pode conhecer os serviços pela internet antes de entrar em contato. Uma apresentação profissional e fácil de navegar ajuda a transmitir confiança nessa primeira impressão.\n\nPreparei uma prévia renovada:\n{preview_url}\n\nÉ demonstrativa, independente, não oficial e sem compromisso; não altera o site atual. O que achou?\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}",
+        'full': "Olá! Sou Lucas, da scarasoft, aqui de Bauru.\n\nConheci o site da {empresa} e preparei uma proposta visual de como ele poderia ficar com uma apresentação mais moderna e um caminho mais direto para o cliente solicitar orçamento.\n\nVocê pode conferir a prévia aqui:\nVer a prévia do site\n\nÉ uma demonstração independente, não oficial e sem compromisso.\n\nSe gostar do resultado, posso explicar como transformar essa prévia no novo site da empresa. Teriam interesse?\n\nAbraço,\nLucas Scaranello\nscarasoft\n{email_comercial}\n{telefone_comercial}",
     },
     'site_inoperante': {
         'subject': 'Uma demonstração de site para {empresa}',
         'short': 'Olá! Sou Lucas, da scarasoft. Ao pesquisar a {empresa}, encontrei esta dificuldade ao acessar o site informado: {observacao_verificada}. Uma apresentação profissional ajuda a mostrar os serviços, transmitir confiança e facilitar o contato. Preparei uma prévia: {preview_url}\nÉ demonstrativa, independente, não oficial e sem compromisso. O que achou?',
-        'full': 'Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Ao pesquisar a {empresa}, tentei acessar o site informado e encontrei esta dificuldade: {observacao_verificada}.\n\nQuando alguém procura um serviço pela internet, não conseguir abrir o site pode levar essa pessoa a buscar outra opção. Uma apresentação profissional ajuda a mostrar os serviços, transmitir confiança e facilitar o contato.\n\nPreparei esta prévia demonstrativa:\n{preview_url}\n\nEla é independente, não oficial e sem compromisso. Gostaria de saber o que achou.\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}',
+        'full': 'Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Ao pesquisar a {empresa}, tentei acessar o site informado e encontrei esta dificuldade: {observacao_verificada}.\n\nQuando alguém procura um serviço pela internet, não conseguir abrir o site pode levar essa pessoa a buscar outra opção. Uma apresentação profissional ajuda a mostrar os serviços, transmitir confiança e facilitar o contato.\n\nPreparei esta prévia demonstrativa:\nVer a prévia do site\n\nEla é independente, não oficial e sem compromisso. Gostaria de saber o que achou.\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}',
     },
 }
 
@@ -83,6 +84,31 @@ def render(template, variant, values):
     result = re.sub(r'{([^{}]+)}', lambda match: values[match.group(1)], source)
     if re.search(r'{[^{}]+}', result): raise ValueError('Unfilled message placeholder')
     return result
+
+def email_html(message, preview_url):
+    """Safe HTML alternative with a named preview link; no remote images or tracking."""
+    parsed = urlsplit(preview_url)
+    if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError('Verified HTTPS preview required for email link')
+    label = 'Ver a prévia do site'
+    if message.count(label) != 1:
+        raise ValueError('Prepared email must contain one preview link label')
+    blocks = []
+    for block in message.split('\n\n'):
+        lines = block.splitlines()
+        content = []
+        for line in lines:
+            if line == label:
+                content.append(f'<a href="{escape(preview_url, quote=True)}">{label}</a>')
+            else:
+                safe = escape(line)
+                if line.startswith(('Preparei uma prévia de site especialmente',
+                                    'Se gostar da ideia, posso te explicar',
+                                    'Você pode conferir a prévia aqui:')):
+                    safe = '<strong>' + safe + '</strong>'
+                content.append(safe)
+        blocks.append('<p>' + '<br>'.join(content) + '</p>')
+    return '<!doctype html><html lang="pt-BR"><body>' + ''.join(blocks) + '</body></html>'
 
 def whatsapp_link(number, message):
     if not re.fullmatch(r'\+[1-9][0-9]{7,14}', number): raise ValueError('Invalid WhatsApp number')

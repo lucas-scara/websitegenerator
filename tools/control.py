@@ -14,9 +14,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 import uuid
 import mimetypes
+from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from quick_site import create as create_quick_site, TEMPLATES, profile, validate as validate_quick_site
 import commercial
+import gmail_outreach
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = Path(os.environ.get('REVAMP_DB', ROOT / 'data' / 'revamp.sqlite3'))
@@ -26,6 +28,10 @@ NEXT = {'queued': ['reviewing'], 'reviewing': ['verified', 'extracting'], 'verif
 
 def now():
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')
+
+def gmail_ledger():
+    return SimpleNamespace(ROOT=ROOT, connect=connect, now=now, event=event,
+                           commercial=commercial, require_commercial_identity=require_commercial_identity)
 
 def ident(prefix):
     return prefix + '-' + uuid.uuid4().hex[:12]
@@ -55,7 +61,7 @@ def identity(value):
         return 'phone:' + raw
     raise ValueError('Identity must use domain:, phone: or email:')
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 def operation_limits():
     """Project defaults; persisted SQLite config remains authoritative."""
@@ -132,6 +138,15 @@ def migrate(con, hook=None):
             id INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL REFERENCES jobs(id),
             channel TEXT NOT NULL, status TEXT NOT NULL, message TEXT NOT NULL,
             evidence TEXT NOT NULL, created_at TEXT NOT NULL)''')
+        if version < 6:
+            existing_columns = {row['name'] for row in con.execute('PRAGMA table_info(commercial_attempts)')}
+            for column in ('source TEXT NOT NULL DEFAULT \'manual\'', 'recipient TEXT', 'sender TEXT',
+                           'subject TEXT', 'gmail_message_id TEXT', 'gmail_thread_id TEXT',
+                           'touch INTEGER NOT NULL DEFAULT 0', 'rfc_message_id TEXT'):
+                if column.split()[0] not in existing_columns:
+                    con.execute('ALTER TABLE commercial_attempts ADD COLUMN ' + column)
+            con.execute('DROP INDEX IF EXISTS one_gmail_attempt_per_job')
+            con.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_gmail_attempt_per_touch ON commercial_attempts(job_id,touch) WHERE source='gmail_api'")
         con.execute('''CREATE TABLE IF NOT EXISTS operations(
             job_id TEXT NOT NULL REFERENCES jobs(id), kind TEXT NOT NULL,
             operation_key TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL,
@@ -280,6 +295,13 @@ def snapshot():
             JOIN jobs ON jobs.id=stage_runs.job_id ORDER BY stage_runs.id DESC LIMIT 400''')]
         for j in out['jobs']: j['data'] = json.loads(j['data'])
         out['commercial_attempts'] = [dict(r) for r in c.execute('SELECT * FROM commercial_attempts ORDER BY id DESC')]
+        out['gmail_authorization'] = {}
+        out['gmail_followups'] = {}
+        for j in out['jobs']:
+            view = gmail_outreach.authorization(gmail_ledger(), j)
+            # Authorization metadata is local, but no token or private configuration is exposed.
+            out['gmail_authorization'][j['id']] = view
+            out['gmail_followups'][j['id']] = gmail_outreach.followup_status(c, j)
         out['legacy_submissions'] = [dict(r) for r in c.execute('SELECT * FROM submissions')]
         for b in out['batches']: b.update(batch_progress(c, b['id']))
         out['settings'] = {'batch_size': 3, **{key: int(c.execute('SELECT value FROM config WHERE key=?', (key,)).fetchone()[0]) for key in operation_limits()}}
@@ -871,6 +893,8 @@ def prepare_commercial(jid, observation=''):
             raise ValueError('A verified public preview is required')
         if job['contact_status'] in ('opted_out','not_interested','uncertain','sent','submitted','replied','interested','attempting'):
             raise ValueError('Commercial contact is already resolved or requires review')
+        if job['contact_status'] == 'prepared' and (data.get('commercial_contact') or {}).get('message'):
+            raise ValueError('A commercial message is already prepared; review it before recording a result')
         if c.execute('SELECT 1 FROM submissions WHERE job_id=?', (jid,)).fetchone():
             raise ValueError('Legacy submission exists; review before preparing')
         latest = c.execute('SELECT status FROM commercial_attempts WHERE job_id=? ORDER BY id DESC LIMIT 1', (jid,)).fetchone()
@@ -910,6 +934,8 @@ def prepare_commercial(jid, observation=''):
                   'telefone_comercial': os.environ.get('BR_COMMERCIAL_PHONE','').strip()}
         variant = 'full' if channel == 'email' else 'short'
         message = commercial.render(template, variant, values)
+        if channel == 'email':
+            message += '\n\nSe preferir não receber novos contatos da scarasoft, responda a este e-mail solicitando isso.'
         subject = commercial.render(template, 'subject', values) if channel == 'email' else ''
         if channel != 'email':
             message += '\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}'.format(**values)
@@ -928,7 +954,7 @@ def require_commercial_identity(message):
     phone = os.environ.get('BR_COMMERCIAL_PHONE','').strip()
     if not email or not phone or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
         raise ValueError('Approved commercial email and phone must be configured locally')
-    if any(value not in message for value in ('scarasoft — Lucas Scaranello', email, phone)):
+    if any(value not in message for value in ('Lucas Scaranello', 'scarasoft', email, phone)):
         raise ValueError('Message lacks approved commercial identity')
 
 def load_commercial_env():
@@ -969,6 +995,8 @@ def record_commercial(jid, status, evidence, channel='', proof=''):
         current = job['contact_status']
         if current == 'opted_out' or c.execute("SELECT 1 FROM commercial_attempts WHERE job_id=? AND status='opted_out'", (jid,)).fetchone():
             raise ValueError('Opt-out prevents further contact')
+        if c.execute("SELECT 1 FROM commercial_attempts WHERE job_id=? AND source='gmail_api' AND status IN ('attempting','uncertain','sent')", (jid,)).fetchone() and status in ('sent','sent_external','uncertain','failed_no_send'):
+            raise ValueError('Gmail attempt must be reconciled before recording another contact result')
         prior = c.execute('SELECT status FROM commercial_attempts WHERE job_id=? ORDER BY id DESC LIMIT 1', (jid,)).fetchone()
         if status in ('sent','uncertain','failed_no_send'):
             if current != 'prepared' or not prepared.get('message'):
@@ -1055,7 +1083,7 @@ def serve(port):
             origin=self.headers.get('Origin')
             if not self.valid_host() or origin not in (f'http://127.0.0.1:{self.server.server_port}',f'http://localhost:{self.server.server_port}'):
                 return self.send(403,{'error':'Same-origin browser request required'})
-            if self.path not in ('/api/batches','/api/sites','/api/commercial/prepare','/api/commercial/record'): return self.send(404,{'error':'Not found'})
+            if self.path not in ('/api/batches','/api/sites','/api/commercial/prepare','/api/commercial/record','/api/commercial/gmail-simulate','/api/commercial/gmail-send','/api/commercial/gmail-followup'): return self.send(404,{'error':'Not found'})
             try:
                 size=int(self.headers.get('Content-Length','0'))
                 if size<1 or size>8192 or self.headers.get_content_type()!='application/json': raise ValueError('JSON body required (8 KB maximum)')
@@ -1064,6 +1092,12 @@ def serve(port):
                     self.send(200,prepare_commercial(data.get('job_id'),data.get('observation','')))
                 elif self.path=='/api/commercial/record':
                     self.send(200,record_commercial(data.get('job_id'),data.get('status'),data.get('evidence',''),data.get('channel',''),data.get('proof','')))
+                elif self.path=='/api/commercial/gmail-simulate':
+                    self.send(200,gmail_outreach.simulate(gmail_ledger(),data.get('job_id')))
+                elif self.path=='/api/commercial/gmail-send':
+                    self.send(200,gmail_outreach.dispatch(gmail_ledger(),data.get('job_id')))
+                elif self.path=='/api/commercial/gmail-followup':
+                    self.send(200,gmail_outreach.dispatch(gmail_ledger(),data.get('job_id'),touch=data.get('touch')))
                 elif self.path=='/api/sites':
                     result=create_quick_site(data)
                     result['preview_url']='/preview/'+result['id']+'/'
@@ -1096,6 +1130,11 @@ def main():
     s=sub.add_parser('manual-outreach'); s.add_argument('--job',required=True); s.add_argument('--worker',required=True); s.add_argument('--reason',required=True); s.add_argument('--message-file',type=Path,required=True); s.add_argument('--email',default=''); s.add_argument('--phone',default='')
     s=sub.add_parser('commercial-prepare'); s.add_argument('--job',required=True); s.add_argument('--observation',default='')
     s=sub.add_parser('commercial-record'); s.add_argument('--job',required=True); s.add_argument('--status',choices=['sent','sent_external','uncertain','failed_no_send','replied','interested','not_interested','opted_out'],required=True); s.add_argument('--evidence',required=True); s.add_argument('--channel',choices=['form','email','whatsapp_manual'],default=''); s.add_argument('--proof',default='')
+    s=sub.add_parser('gmail-auth')
+    s=sub.add_parser('gmail-simulate'); s.add_argument('--job',required=True)
+    s=sub.add_parser('gmail-send'); s.add_argument('--job',required=True)
+    s=sub.add_parser('gmail-followup'); s.add_argument('--job',required=True); s.add_argument('--touch',type=int,choices=[1,2],required=True)
+    s=sub.add_parser('gmail-reconcile'); s.add_argument('--attempt',type=int,required=True); s.add_argument('--status',choices=['sent','failed_no_send'],required=True); s.add_argument('--evidence',required=True); s.add_argument('--message-id',default=''); s.add_argument('--thread-id',default='')
     s=sub.add_parser('recover'); s.add_argument('--job',required=True); s.add_argument('--reason',required=True)
     s=sub.add_parser('batch-status'); s.add_argument('--batch',required=True); s.add_argument('--status',choices=['running','complete','blocked','exhausted'],required=True)
     s=sub.add_parser('cancel-batch'); s.add_argument('--batch',required=True); s.add_argument('--reason',required=True)
@@ -1117,6 +1156,11 @@ def main():
         elif a.cmd=='manual-outreach': result=manual_outreach(a.job,a.worker,a.reason,a.message_file.read_text(),a.email,a.phone)
         elif a.cmd=='commercial-prepare': result=prepare_commercial(a.job,a.observation)
         elif a.cmd=='commercial-record': result=record_commercial(a.job,a.status,a.evidence,a.channel,a.proof)
+        elif a.cmd=='gmail-auth': result=gmail_outreach.authenticate(gmail_ledger())
+        elif a.cmd=='gmail-simulate': result=gmail_outreach.simulate(gmail_ledger(),a.job)
+        elif a.cmd=='gmail-send': result=gmail_outreach.dispatch(gmail_ledger(),a.job)
+        elif a.cmd=='gmail-followup': result=gmail_outreach.dispatch(gmail_ledger(),a.job,touch=a.touch)
+        elif a.cmd=='gmail-reconcile': result=gmail_outreach.reconcile(gmail_ledger(),a.attempt,a.status,a.evidence,a.message_id,a.thread_id)
         elif a.cmd=='capacity': result=set_capacity(a.count,a.if_current)
         elif a.cmd=='external-limit':
             key = 'max_deploys' if a.kind == 'deploy' else 'max_external_calls'

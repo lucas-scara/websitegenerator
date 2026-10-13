@@ -113,6 +113,29 @@ test('produção publicada e contato comercial permanecem separados', () => {
   assert.match(display.commercialSection(job), /<option value="replied">/);
 });
 
+test('mensagem de e-mail preparada mostra simulação e não oferece preparo duplicado', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.gmail_authorization = { "job-1": { mode: "live", authorized: true, sender: "scarasoftbauru@gmail.com", reason: "Autorizado" } }; this.commercialSection = commercialSection;', display);
+  const job = { id: 'job-1', stage: 'ready', contact_status: 'prepared', preview_url: 'https://preview.example',
+    data: { preview_verified: true, commercial_contact: { channel: 'email', destination: 'empresa@example.org', subject: 'Proposta', message: 'Texto preparado' } } };
+  const html = display.commercialSection(job);
+  assert.match(html, /Destinatário: empresa@example.org/);
+  assert.match(html, /Remetente: scarasoftbauru@gmail.com/);
+  assert.match(html, /id="gmail-simulate"/);
+  assert.match(html, /id="gmail-send"/);
+  assert.doesNotMatch(html, /id="prepare-commercial"/);
+});
+
+test('acompanhamento mostra datas e ação apenas quando vencido e autorizado', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.gmail_authorization = { "job-1": { mode: "live", authorized: true, sender: "scarasoftbauru@gmail.com", reason: "Autorizado" } }; state.gmail_followups = { "job-1": { available: true, first_sent_at: "2026-10-01T12:00:00+00:00", day4_due_at: "2026-10-05T12:00:00+00:00", day10_due_at: "2026-10-11T12:00:00+00:00", day4_status: "pending", day10_status: "pending", next_touch: 1, due: true, message: "Olá!" } }; this.commercialSection = commercialSection;', display);
+  const job = { id: 'job-1', stage: 'ready', contact_status: 'sent', preview_url: 'https://preview.example', data: { preview_verified: true, commercial_contact: { channel: 'email', destination: 'empresa@example.org', subject: 'Proposta', message: 'Texto preparado' } } };
+  assert.match(display.commercialSection(job), /id="gmail-followup" data-touch="1"/);
+  assert.match(display.commercialSection(job), /Primeiro envio:/);
+  vm.runInContext('state.gmail_followups["job-1"].due = false;', display);
+  assert.doesNotMatch(display.commercialSection(job), /id="gmail-followup"/);
+});
+
 test('operações mostram tentativas sem injetar HTML em falhas e artefatos', () => {
   const display = vm.createContext({ URL, Intl, Date });
   vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.operations = [{ job_id: "job-1", kind: "deploy", status: "uncertain", executor: "vercel-cli", model: null, attempts: 1, duration_seconds: null, failure: "<script>alert(1)</script>", artifact: "runs/job-1/file", remote_url: "javascript:alert(1)" }]; this.operationSection = operationSection;', display);
