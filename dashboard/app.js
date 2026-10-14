@@ -3,6 +3,7 @@ const $ = (selector) => document.querySelector(selector);
 const state = { batches: [], jobs: [], events: [], workers: [], operations: [], stage_runs: [], templates: [], commercial_attempts: [], legacy_submissions: [], gmail_authorization: {}, gmail_followups: {}, settings: { batch_size: 3, max_workers: 3 } };
 let batchFilter = 'all', stageFilter = 'all', selectedJob = null, previousSignature = '', connected = false;
 const commercialSelection = new Map();
+const commercialApprovalFeedbackByBatch = new Map();
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const STAGES = { queued: 'Na fila', reviewing: 'Em análise', extracting: 'Coletando dados', building: 'Gerando', checking: 'Verificando', deploying: 'Publicando', ready: 'Prévia pronta', contacting: 'Tentativa de contato', complete: 'Contato efetuado', sent: 'Enviado', sent_external: 'Contato externo comprovado', uncertain: 'Resultado incerto', blocked: 'Bloqueado', skipped: 'Ignorado', manual: 'Contato manual', simulated: 'Simulado', pending: 'Pendente', prepared: 'Preparado', replied: 'Respondeu', interested: 'Interessado', not_interested: 'Sem interesse', opted_out: 'Não contatar', failed_no_send: 'Falha sem envio', whatsapp_manual: 'WhatsApp manual', no_channel: 'Sem canal', form: 'Formulário', email: 'E-mail', not_sent: 'Não enviado', attempting: 'Tentativa reservada', submitted: 'Enviado', manual_required: 'Contato manual necessário' };
 const production = (job) => job.data?.preview_verified === true && safeURL(job.preview_url) ? 'Prévia verificada' : label(job.stage);
@@ -190,6 +191,13 @@ function commercialDuration(duration) {
   const total = entries.reduce((sum, [, value]) => sum + Number(value), 0);
   return `${total.toFixed(1)} s (${entries.map(([stage, value]) => `${escapeHTML(label(stage)).replace(/^./, char => char.toLocaleUpperCase('pt-BR'))}: ${Number(value).toFixed(1)} s`).join(' · ')})`;
 }
+function commercialApprovalFeedback(data = {}) {
+  const capacity = data.capacity || {};
+  const approved = Number.isFinite(Number(capacity.approved_new)) ? Number(capacity.approved_new) : 0;
+  const batchRemaining = Number.isFinite(Number(capacity.remaining_batch)) ? capacity.remaining_batch : '—';
+  const dailyRemaining = Number.isFinite(Number(capacity.remaining_daily)) ? capacity.remaining_daily : '—';
+  return `Aprovado: ${approved} contato(s). Capacidade restante após a aprovação: ${batchRemaining} no lote e ${dailyRemaining} hoje. Despacho iniciado; acompanhe os resultados abaixo.`;
+}
 function commercialBatchesHTML(batches = {}) {
   const entries = Object.entries(batches || {});
   if (!entries.length) return '<div class="empty commercial-empty"><div><h3>Nenhuma mensagem preparada</h3><p>As empresas elegíveis aparecerão aqui depois da verificação da prévia.</p></div></div>';
@@ -206,7 +214,9 @@ function commercialBatchesHTML(batches = {}) {
     }).join('');
     const approvable = Number(capacity.approvable_now ?? capacity.remaining_batch ?? eligibleSelected.length);
     const batchStatus = counts.sending ? 'Envio em andamento' : counts.uncertain ? 'Resultado incerto' : counts.blocked ? 'Bloqueadas' : counts.sent ? 'Enviadas' : eligibleSelected.length ? 'Aguardando aprovação' : 'Mensagens preparadas';
-    return `<section class="commercial-batch" data-batch-id="${escapeHTML(batchId)}"><header class="commercial-batch-header"><div><span class="eyebrow">Lote ${escapeHTML(batchId)}</span><h3>${escapeHTML(batchStatus)}</h3></div><div class="commercial-counts">Prospectadas ${escapeHTML(counts.prospected ?? rows.length)} · Em produção ${escapeHTML(counts.in_production ?? 0)} · Prévias verificadas ${escapeHTML(counts.previews_verified ?? 0)} · Mensagens preparadas ${escapeHTML(counts.messages_prepared ?? rows.length)} · Aguardando aprovação ${escapeHTML(counts.awaiting_approval ?? 0)} · Envio em andamento ${escapeHTML(counts.sending ?? 0)} · Enviadas ${escapeHTML(counts.sent ?? 0)} · Bloqueadas ${escapeHTML(counts.blocked ?? 0)} · Resultado incerto ${escapeHTML(counts.uncertain ?? 0)}</div></header><div class="commercial-rows">${rowHTML || '<p>Nenhum contato comercial neste lote.</p>'}</div><footer class="commercial-batch-footer"><span>Capacidade: ${escapeHTML(capacity.prior_attempts ?? 0)} tentativas anteriores · ${escapeHTML(capacity.remaining_batch ?? 0)} restantes no lote · ${escapeHTML(capacity.remaining_daily ?? 0)} restantes hoje · esta aprovação permitirá até ${escapeHTML(Math.min(approvable, eligibleSelected.length))} envio(s) selecionado(s) · Duração total e por etapa: ${commercialDuration(batch.duration_seconds)}</span><button type="button" class="primary commercial-approve" data-approve-batch="${escapeHTML(batchId)}"${eligibleSelected.length && approvable > 0 ? '' : ' disabled'}>Aprovar seleção e iniciar envio</button><span class="commercial-feedback" role="status" aria-live="polite"></span></footer></section>`;
+    const operations = [batch.dispatch_status ? `Despacho: ${escapeHTML(label(batch.dispatch_status))}` : '', batch.operational_failure ? `Falha operacional: ${escapeHTML(batch.operational_failure)}` : ''].filter(Boolean);
+    const savedFeedback = commercialApprovalFeedbackByBatch.get(String(batchId)) || '';
+    return `<section class="commercial-batch" data-batch-id="${escapeHTML(batchId)}"><header class="commercial-batch-header"><div><span class="eyebrow">Lote ${escapeHTML(batchId)}</span><h3>${escapeHTML(batchStatus)}</h3></div><div class="commercial-counts">Prospectadas ${escapeHTML(counts.prospected ?? rows.length)} · Em produção ${escapeHTML(counts.in_production ?? 0)} · Prévias verificadas ${escapeHTML(counts.previews_verified ?? 0)} · Mensagens preparadas ${escapeHTML(counts.messages_prepared ?? rows.length)} · Aguardando aprovação ${escapeHTML(counts.awaiting_approval ?? 0)} · Envio em andamento ${escapeHTML(counts.sending ?? 0)} · Enviadas ${escapeHTML(counts.sent ?? 0)} · Bloqueadas ${escapeHTML(counts.blocked ?? 0)} · Resultado incerto ${escapeHTML(counts.uncertain ?? 0)}</div></header>${operations.length ? `<p class="commercial-operation-status" role="status">${operations.join(' · ')}</p>` : ''}<div class="commercial-rows">${rowHTML || '<p>Nenhum contato comercial neste lote.</p>'}</div><footer class="commercial-batch-footer"><span>Capacidade: ${escapeHTML(capacity.prior_attempts ?? 0)} tentativas anteriores · ${escapeHTML(capacity.remaining_batch ?? 0)} restantes no lote · ${escapeHTML(capacity.remaining_daily ?? 0)} restantes hoje · esta aprovação permitirá até ${escapeHTML(Math.min(approvable, eligibleSelected.length))} envio(s) selecionado(s) · Duração total e por etapa: ${commercialDuration(batch.duration_seconds)}</span><button type="button" class="primary commercial-approve" data-approve-batch="${escapeHTML(batchId)}"${eligibleSelected.length && approvable > 0 ? '' : ' disabled'}>Aprovar seleção e iniciar envio</button><span class="commercial-feedback" role="status" aria-live="polite">${escapeHTML(savedFeedback)}</span></footer></section>`;
   }).join('');
 }
 function jobCard(job, index) {
@@ -330,6 +340,7 @@ $('#commercial-batches').addEventListener('change', event => {
   const batchId = String(input.dataset.commercialSelect), jobId = String(input.dataset.jobId);
   const selected = commercialSelection.get(batchId) || new Set();
   if (input.checked) selected.add(jobId); else selected.delete(jobId);
+  commercialApprovalFeedbackByBatch.delete(batchId);
   commercialSelection.set(batchId, selected);
   render();
 });
@@ -348,10 +359,13 @@ $('#commercial-batches').addEventListener('click', async event => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'A aprovação do lote foi recusada.');
     commercialSelection.delete(batchId);
-    feedback.textContent = `Aprovado. Capacidade restante: ${data.capacity?.remaining_batch ?? '—'} no lote e ${data.capacity?.remaining_daily ?? '—'} hoje. Despacho iniciado; acompanhe os resultados abaixo.`;
+    const approvalFeedback = commercialApprovalFeedback(data);
+    commercialApprovalFeedbackByBatch.set(batchId, approvalFeedback);
+    feedback.textContent = approvalFeedback;
     previousSignature = '';
     await poll();
   } catch (error) {
+    commercialApprovalFeedbackByBatch.delete(batchId);
     feedback.textContent = error.message;
     button.disabled = false;
   }

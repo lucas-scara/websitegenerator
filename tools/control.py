@@ -729,7 +729,7 @@ def auto_prepare_commercial(jid):
         with connect() as c:
             event(c, jid, 'Automatic commercial preparation pending: ' + str(exc))
         return {'id': jid, 'production_status': 'published',
-                'contact_status': j['contact_status'], 'commercial_preparation_error': str(exc)}
+                'contact_status': job['contact_status'], 'commercial_preparation_error': str(exc)}
 
 def recover(jid, reason):
     if not reason.strip(): raise ValueError('Recovery reason required')

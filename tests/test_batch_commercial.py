@@ -4,7 +4,9 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).parents[1]
 spec = importlib.util.spec_from_file_location('control', ROOT / 'tools/control.py')
@@ -111,8 +113,10 @@ class BatchCommercialTests(unittest.TestCase):
         self.assertEqual(sum(item['status'] == 'sent' for item in result['results']), 2)
 
     def test_digest_invalidates_when_reviewed_content_changes(self):
+        original_auth = gmail.AUTH_FILE
         for index, mutation in enumerate(('recipient', 'message', 'preview', 'channel')):
             with self.subTest(mutation=mutation):
+                gmail.AUTH_FILE = Path(self.tmp.name) / f'gmail-authorization-{mutation}.json'
                 isolated_batch = control.batch('chaveiros', 'Bauru, SP', 1)['id']
                 jid = self.add_job_in_batch(isolated_batch, f'Isolada {index}', f'isolada{index}@example.org')
                 self.approve(isolated_batch, [jid])
@@ -141,6 +145,7 @@ class BatchCommercialTests(unittest.TestCase):
                     data['commercial_contact']['message'] = data['commercial_contact']['message'].split('\nAlteração após aprovação')[0]
                     c.execute('UPDATE jobs SET data=?,preview_url=? WHERE id=?',
                               (json.dumps(data), 'https://preview.example/other', jid))
+        gmail.AUTH_FILE = original_auth
 
     def test_stale_review_is_rejected_before_authorization_is_written(self):
         jid = self.jobs[0]
@@ -177,6 +182,96 @@ class BatchCommercialTests(unittest.TestCase):
         # No authorization is written after a denied approval.
         auth = json.loads(Path(gmail.AUTH_FILE).read_text())
         self.assertEqual(auth['batch_id'], self.batch_id)
+
+    def test_approval_returns_nested_capacity_consistent_with_review(self):
+        selected = self.jobs[:2]
+        result = self.approve(self.batch_id, selected)
+        self.assertIn('capacity', result)
+        self.assertEqual(result['capacity']['remaining_daily'], batch_commercial.DAILY_LIMIT - len(selected))
+        self.assertEqual(result['capacity']['approved_new'], len(selected))
+        self.assertEqual(result['capacity']['prior_attempts'], 0)
+
+    def test_concurrent_approvals_cannot_replace_pending_authorization(self):
+        other_batch = control.batch('chaveiros', 'Campinas, SP', 1)['id']
+        other = self.add_job_in_batch(other_batch, 'Outra empresa', 'concorrente@example.org')
+        barrier = threading.Barrier(2)
+        outcomes = []
+
+        def attempt(batch_id, job_id):
+            barrier.wait(timeout=5)
+            try:
+                outcomes.append(('approved', self.approve(batch_id, [job_id])))
+            except ValueError as exc:
+                outcomes.append(('rejected', str(exc)))
+
+        threads = [threading.Thread(target=attempt, args=(self.batch_id, self.jobs[0])),
+                   threading.Thread(target=attempt, args=(other_batch, other))]
+        for thread in threads: thread.start()
+        for thread in threads: thread.join(timeout=10)
+        self.assertTrue(all(not thread.is_alive() for thread in threads), 'approval threads did not finish')
+        self.assertEqual(sum(kind == 'approved' for kind, _ in outcomes), 1, outcomes)
+        auth = json.loads(Path(gmail.AUTH_FILE).read_text())
+        winner = next(job for job in (self.jobs[0], other) if job in auth['job_ids'])
+        self.assertEqual(auth['job_ids'], [winner])
+        # The surviving authorization must stay pending after a process restart.
+        restarted = FakeGmail()
+        batch_commercial.resume(self.ledger, client_factory=lambda: restarted)
+        self.assertEqual(len(restarted.calls), 1)
+        self.assertEqual(restarted.calls[0][0], 'empresa1@example.org' if winner == self.jobs[0] else 'concorrente@example.org')
+
+    def test_restart_skips_attempting_and_uncertain_and_sends_unattempted_approved_contact(self):
+        selected = self.jobs[:3]
+        self.approve(self.batch_id, selected)
+        for jid, status in ((selected[0], 'attempting'), (selected[1], 'uncertain')):
+            with control.connect() as c:
+                c.execute('''INSERT INTO commercial_attempts
+                    (job_id,channel,status,message,evidence,created_at,source,recipient,sender,subject,touch)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,0)''',
+                    (jid,'email',status,'interrupted','unknown',control.now(),'gmail_api',
+                     f'{jid}@example.org','scarasoftbauru@gmail.com','Interrupted'))
+        restarted = FakeGmail()
+        batch_commercial.resume(self.ledger, client_factory=lambda: restarted)
+        self.assertEqual(len(restarted.calls), 1)
+        self.assertEqual(restarted.calls[0][0], 'empresa3@example.org')
+        again = FakeGmail()
+        batch_commercial.resume(self.ledger, client_factory=lambda: again)
+        self.assertEqual(again.calls, [])
+        other_batch = control.batch('chaveiros', 'Campinas, SP', 1)['id']
+        other = self.add_job_in_batch(other_batch, 'Outra empresa', 'outra@example.org')
+        with self.assertRaisesRegex(ValueError, 'uncertain outcome'):
+            self.approve(other_batch, [other])
+
+    def test_completed_dispatch_closes_its_authorization(self):
+        self.approve(self.batch_id, self.jobs[:2])
+        sent = FakeGmail()
+        report = batch_commercial.dispatch_batch(self.ledger, self.batch_id,
+                                                 client_factory=lambda: sent)
+        self.assertEqual(report['report']['counts']['sent'], 2)
+        auth = json.loads(Path(gmail.AUTH_FILE).read_text())
+        self.assertNotEqual(auth.get('mode'), 'live', 'completed approval remains available for sending')
+        restarted = FakeGmail()
+        result = batch_commercial.resume(self.ledger, client_factory=lambda: restarted)
+        self.assertEqual(restarted.calls, [])
+        self.assertIn(result.get('status'), ('no_authorization', 'complete'))
+
+    def test_unexpected_dispatch_failure_is_recorded_and_never_retried(self):
+        self.approve(self.batch_id, self.jobs[:2])
+        with patch.object(batch_commercial.gmail, 'dispatch', side_effect=RuntimeError('unexpected transport crash')):
+            result = batch_commercial.dispatch_batch(self.ledger, self.batch_id,
+                                                     client_factory=lambda: FakeGmail())
+        self.assertEqual(result.get('status'), 'operational_failure', result)
+        self.assertIn('RuntimeError', result.get('operational_failure', ''))
+        self.assertEqual(result.get('report', {}).get('dispatch_status'), 'operational_failure')
+        auth = json.loads(Path(gmail.AUTH_FILE).read_text())
+        self.assertEqual(auth.get('mode'), 'paused')
+        self.assertIn('RuntimeError', auth.get('operational_failure', ''))
+        with control.connect() as c:
+            events = list(c.execute("SELECT message FROM events WHERE message LIKE '%operational_failure%'"))
+        self.assertTrue(events, 'unexpected failure was not recorded in the audit event log')
+        restarted = FakeGmail()
+        resumed = batch_commercial.resume(self.ledger, client_factory=lambda: restarted)
+        self.assertEqual(resumed.get('status'), 'paused')
+        self.assertEqual(restarted.calls, [])
 
     def test_daily_limit_is_enforced_during_dispatch_when_capacity_changes(self):
         # Concurrent or earlier jobs may consume capacity after approval; dispatch still checks.

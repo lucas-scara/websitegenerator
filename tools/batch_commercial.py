@@ -2,9 +2,9 @@
 import datetime as dt
 import json
 import os
-from pathlib import Path
 import tempfile
 import threading
+import uuid
 
 import gmail_outreach as gmail
 
@@ -15,6 +15,63 @@ _dispatch_lock = threading.Lock()
 
 def _authorization_path(ledger):
     return gmail.private_path(ledger, gmail.AUTH_FILE, 'gmail-authorization.json')
+
+
+def _write_authorization(path, auth):
+    """Replace the single private authorization without exposing a partial file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.gmail-authorization-', dir=path.parent)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, 'w') as file:
+            json.dump(auth, file, ensure_ascii=False)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary): os.unlink(temporary)
+
+
+def _authorization_valid(auth):
+    if auth.get('mode') != 'live' or auth.get('approval_version') != 2:
+        return False
+    try:
+        approved = gmail.authorization_time(auth.get('approved_at'))
+        expires = gmail.authorization_time(auth.get('expires_at'))
+        current = dt.datetime.now(dt.timezone.utc)
+        return approved <= current < expires and approved < expires
+    except ValueError:
+        return False
+
+
+def _pending(c, auth):
+    """An approved contact is unresolved until a certain first-attempt result exists."""
+    for jid in auth.get('job_ids', []):
+        attempt = c.execute("SELECT status FROM commercial_attempts WHERE job_id=? AND source='gmail_api' AND touch=0", (jid,)).fetchone()
+        if attempt is None or attempt['status'] in ('attempting', 'uncertain'):
+            return True
+    return False
+
+
+def _uncertain(c, auth):
+    return any(c.execute("SELECT 1 FROM commercial_attempts WHERE job_id=? AND source='gmail_api' AND touch=0 AND status IN ('attempting','uncertain')", (jid,)).fetchone()
+               for jid in auth.get('job_ids', []))
+
+
+def _set_dispatch_state(ledger, approval_id, mode, status, reason=''):
+    """Change only the authorization this dispatcher started with."""
+    with ledger.connect() as c:
+        path = _authorization_path(ledger)
+        current = gmail.private_json(path)
+        if current.get('approval_id') != approval_id or current.get('mode') != 'live':
+            return False
+        updated = {**current, 'mode': mode, 'dispatch_status': status,
+                   'dispatch_updated_at': ledger.now()}
+        if reason:
+            updated['operational_failure' if status == 'operational_failure' else 'dispatch_reason'] = reason[:300]
+        _write_authorization(path, updated)
+        ledger.event(c, None, f'Gmail batch {current["batch_id"]} dispatch {status}.')
+        return True
 
 
 def _counts(c, batch_id, current_time):
@@ -82,8 +139,15 @@ def review(ledger, batch_id):
         durations = {row['stage']: row['seconds'] for row in c.execute('''SELECT s.stage,SUM(s.duration_seconds) seconds
             FROM stage_runs s JOIN jobs j ON j.id=s.job_id WHERE j.batch_id=? AND s.duration_seconds IS NOT NULL
             GROUP BY s.stage''', (batch_id,))}
+        try:
+            auth = gmail.private_json(_authorization_path(ledger))
+        except ValueError:
+            auth = {}
+        dispatch_state = auth if auth.get('batch_id') == batch_id else {}
         return {'rows': rows, 'counts': counts, 'duration_seconds': durations,
-                'capacity': _counts(c, batch_id, ledger.now())}
+                'capacity': _counts(c, batch_id, ledger.now()),
+                'dispatch_status': dispatch_state.get('dispatch_status', ''),
+                'operational_failure': dispatch_state.get('operational_failure', '')}
 
 
 def approve(ledger, batch_id, job_ids, reviewed=None, *, start_dispatch=False):
@@ -95,6 +159,13 @@ def approve(ledger, batch_id, job_ids, reviewed=None, *, start_dispatch=False):
     with ledger.connect() as c:
         if not c.execute('SELECT 1 FROM batches WHERE id=?', (batch_id,)).fetchone():
             raise ValueError('Unknown batch')
+        path = _authorization_path(ledger)
+        if path.exists():
+            previous = gmail.private_json(path)
+            if previous.get('approval_version') == 2 and _uncertain(c, previous):
+                raise ValueError('An earlier Gmail attempt has an uncertain outcome; reconcile it before another approval')
+            if _authorization_valid(previous) and _pending(c, previous):
+                raise ValueError('An active Gmail authorization still has pending contacts; finish or reconcile it before another approval')
         capacity = _counts(c, batch_id, ledger.now())
         if len(job_ids) > capacity['approvable_now']:
             raise ValueError(f"Only {capacity['approvable_now']} new Gmail sends fit the batch and daily limits")
@@ -112,28 +183,21 @@ def approve(ledger, batch_id, job_ids, reviewed=None, *, start_dispatch=False):
                 raise ValueError('Reviewed contact or preview changed; refresh and approve again')
         approved_at = dt.datetime.now(dt.timezone.utc)
         auth = {'mode': 'live', 'approval_version': 2, 'approved_by': 'Lucas Scaranello',
+                'approval_id': uuid.uuid4().hex, 'dispatch_status': 'pending',
                 'approved_at': approved_at.isoformat(timespec='seconds'),
                 'expires_at': (approved_at+dt.timedelta(hours=24)).isoformat(timespec='seconds'),
                 'batch_id': batch_id, 'job_ids': job_ids, 'reviewed': reviewed,
                 'sender': gmail.APPROVED_SENDER,
                 'max_contacts': capacity['prior_attempts']+len(job_ids),
                 'daily_limit': DAILY_LIMIT}
-        path = _authorization_path(ledger)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, temporary = tempfile.mkstemp(prefix='.gmail-authorization-', dir=path.parent)
-        try:
-            os.fchmod(fd, 0o600)
-            with os.fdopen(fd, 'w') as file:
-                json.dump(auth, file, ensure_ascii=False)
-                file.flush()
-                os.fsync(file.fileno())
-            os.replace(temporary, path)
-        finally:
-            if os.path.exists(temporary): os.unlink(temporary)
+        _write_authorization(path, auth)
         ledger.event(c, None, f'Gmail batch approved: {batch_id}; limit {auth["max_contacts"]}; job_ids={json.dumps(job_ids)}.')
     result = {'batch_id': batch_id, 'job_ids': job_ids, 'new_sends': len(job_ids),
               'prior_attempts': capacity['prior_attempts'], 'max_contacts': auth['max_contacts'],
-              'remaining_daily': capacity['remaining_daily']-len(job_ids)}
+              'capacity': {'prior_attempts': capacity['prior_attempts'], 'approved_new': len(job_ids),
+                           'remaining_batch': capacity['remaining_batch']-len(job_ids),
+                           'remaining_daily': capacity['remaining_daily']-len(job_ids),
+                           'approvable_now': capacity['approvable_now']-len(job_ids)}}
     if start_dispatch:
         threading.Thread(target=dispatch_batch, args=(ledger, batch_id), daemon=True).start()
     return result
@@ -142,30 +206,54 @@ def approve(ledger, batch_id, job_ids, reviewed=None, *, start_dispatch=False):
 def dispatch_batch(ledger, batch_id, client_factory=None):
     if not _dispatch_lock.acquire(blocking=False):
         return {'batch_id': batch_id, 'status': 'already_running', 'results': []}
+    approval_id = None
+    results = []
     try:
         auth = gmail.private_json(_authorization_path(ledger))
         if auth.get('mode') != 'live' or auth.get('approval_version') != 2 or auth.get('batch_id') != batch_id:
             raise ValueError('No live authorization for this batch')
-        results = []
+        approval_id = auth.get('approval_id')
+        if not _authorization_valid(auth):
+            _set_dispatch_state(ledger, approval_id, 'closed', 'expired')
+            return {'batch_id': batch_id, 'status': 'expired', 'results': [], 'report': review(ledger, batch_id)}
+        unresolved = False
+        blocked = False
         for jid in auth['job_ids']:
             with ledger.connect() as c:
                 job = c.execute('SELECT * FROM jobs WHERE id=? AND batch_id=?', (jid, batch_id)).fetchone()
                 if job is None:
                     results.append({'job_id': jid, 'status': 'blocked', 'reason': 'Job outside batch'})
+                    blocked = True
                     continue
                 prior = c.execute("SELECT status FROM commercial_attempts WHERE job_id=? AND source='gmail_api' AND touch=0", (jid,)).fetchone()
                 if prior:
                     results.append({'job_id': jid, 'status': prior['status'], 'reason': 'Existing attempt; no automatic retry'})
-                    if prior['status'] in ('attempting', 'uncertain'): break
+                    if prior['status'] in ('attempting', 'uncertain'): unresolved = True
                     continue
             try:
                 result = gmail.dispatch(ledger, jid, client_factory() if client_factory else None)
                 results.append({'job_id': jid, **result})
-                if result['status'] == 'uncertain': break
+                if result['status'] in ('attempting', 'uncertain'): unresolved = True
             except ValueError as exc:
                 results.append({'job_id': jid, 'status': 'blocked', 'reason': str(exc)})
+                blocked = True
                 if 'limit' in str(exc).lower() or 'authorization' in str(exc).lower(): break
-        return {'batch_id': batch_id, 'status': 'complete', 'results': results, 'report': review(ledger, batch_id)}
+        if unresolved:
+            _set_dispatch_state(ledger, approval_id, 'paused', 'needs_reconciliation')
+            status = 'needs_reconciliation'
+        elif blocked:
+            _set_dispatch_state(ledger, approval_id, 'paused', 'blocked')
+            status = 'blocked'
+        else:
+            _set_dispatch_state(ledger, approval_id, 'closed', 'complete')
+            status = 'complete'
+        return {'batch_id': batch_id, 'status': status, 'results': results, 'report': review(ledger, batch_id)}
+    except Exception as exc:
+        reason = f'Unexpected dispatcher failure ({type(exc).__name__}); inspect the ledger before retrying'
+        if approval_id is not None:
+            _set_dispatch_state(ledger, approval_id, 'paused', 'operational_failure', reason)
+        return {'batch_id': batch_id, 'status': 'operational_failure', 'results': results,
+                'operational_failure': reason, 'report': review(ledger, batch_id)}
     finally:
         _dispatch_lock.release()
 
@@ -177,5 +265,5 @@ def resume(ledger, client_factory=None):
         return {'status': 'no_authorization'}
     if (auth.get('mode') != 'live' or auth.get('approval_version') != 2
             or not isinstance(auth.get('batch_id'), str)):
-        return {'status': 'no_authorization'}
+        return {'status': 'paused' if auth.get('mode') == 'paused' else 'no_authorization'}
     return dispatch_batch(ledger, auth['batch_id'], client_factory)

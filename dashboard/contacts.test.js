@@ -164,6 +164,33 @@ test('visão de lote mostra mensagem integral, capacidade e permite selecionar a
   assert.doesNotMatch(html, /javascript:/);
 });
 
+test('feedback da aprovação usa capacidade após reservar os contatos selecionados', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function jobCard(job, index)')) + '\nthis.commercialApprovalFeedback = commercialApprovalFeedback;', display);
+  assert.equal(display.commercialApprovalFeedback({ capacity: {
+    prior_attempts: 3, approved_new: 2, remaining_batch: 4, remaining_daily: 7, approvable_now: 2
+  } }), 'Aprovado: 2 contato(s). Capacidade restante após a aprovação: 4 no lote e 7 hoje. Despacho iniciado; acompanhe os resultados abaixo.');
+});
+
+test('feedback de aprovação permanece após renderizar novamente o lote', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function jobCard(job, index)')) + '\nthis.commercialBatchesHTML = commercialBatchesHTML; this.feedbackByBatch = commercialApprovalFeedbackByBatch;', display);
+  const batch = { batch: { rows: [], capacity: { remaining_batch: 4, remaining_daily: 7 } } };
+  display.feedbackByBatch.set('batch', 'Aprovado: 2 contato(s). Capacidade restante após a aprovação: 4 no lote e 7 hoje.');
+  assert.match(display.commercialBatchesHTML(batch), /Aprovado: 2 contato\(s\).*4 no lote e 7 hoje/);
+});
+
+test('lote apresenta estado do despacho e falha operacional com escape HTML', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function jobCard(job, index)')) + '\nthis.commercialBatchesHTML = commercialBatchesHTML;', display);
+  const html = display.commercialBatchesHTML({ batch: {
+    rows: [], dispatch_status: 'failed', operational_failure: '<erro inesperado>'
+  } });
+  assert.match(html, /Despacho: failed/);
+  assert.match(html, /Falha operacional: &lt;erro inesperado&gt;/);
+  assert.doesNotMatch(html, /<erro inesperado>/);
+});
+
 test('aprovação inclui hash revisado de cada contato e recusa linha inelegível ou desatualizada', () => {
   const display = vm.createContext({ URL, Intl, Date });
   vm.runInContext(app.slice(0, app.indexOf('function jobCard(job, index)')) + '\nthis.commercialApprovalPayload = commercialApprovalPayload;', display);
