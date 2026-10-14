@@ -13,22 +13,32 @@ SEARCHES = {
     'dedetizacao': ('dedetizadora', 'dedetizadora em {cidade}'),
     'toldos': ('empresa de toldos', 'instalação de toldos em {cidade}'),
 }
-ALLOWED = {'empresa','cidade','segmento','busca_exemplo','preview_url','observacao_verificada','assinatura','email_comercial','telefone_comercial'}
+ALLOWED = {'empresa','cidade','segmento','busca_exemplo','preview_url','observacao_verificada','email_comercial'}
+
+PHONE_IN_MESSAGE = re.compile(r'(?<![\w/@=])(?:\+?55[\s().-]*)?\(?[1-9]\d\)?[\s().-]*\d{4,5}[\s.-]*\d{4}(?!\d)')
+
+def message_has_phone(message):
+    """Flag phone numbers in outbound copy without inspecting company contact records."""
+    if not isinstance(message, str):
+        return False
+    return any(PHONE_IN_MESSAGE.search(line) for line in message.splitlines()
+               if not line.strip().startswith(('https://', 'http://')))
+
 COPY = {
     'primeiro_site': {
         'subject': 'Preparei uma ideia de site para a {empresa}',
         'short': "Olá! Sou Lucas, da scarasoft. Quem procura {segmento} pode buscar, por exemplo, '{busca_exemplo}'. Um site profissional ajuda a conhecer os serviços da {empresa}, transmite confiança e facilita o contato. Veja a prévia demonstrativa: {preview_url}\nÉ independente, não oficial e sem compromisso. O que achou?",
-        'full': "Olá! Tudo bem?\n\nSou Lucas, da scarasoft, aqui de Bauru.\n\nConheci a {empresa} e tive uma ideia de como apresentar seus serviços de forma mais profissional na internet, facilitando que novos clientes encontrem a empresa e peçam orçamentos.\n\nPreparei uma prévia de site especialmente para a {empresa}:\nVer a prévia do site\n\nÉ apenas uma demonstração independente, sem vínculo com a empresa e sem compromisso.\n\nSe gostar da ideia, posso te explicar como colocar esse site no ar. Faz sentido para vocês?\n\nAbraço,\nLucas Scaranello\nscarasoft\n{email_comercial}\n{telefone_comercial}",
+        'full': "Olá! Tudo bem?\n\nSou Lucas, da scarasoft, aqui de Bauru.\n\nConheci a {empresa} e tive uma ideia de como apresentar seus serviços de forma mais profissional na internet, facilitando que novos clientes encontrem a empresa e peçam orçamentos.\n\nPreparei uma prévia de site especialmente para a {empresa}:\nVer a prévia do site\n\nÉ apenas uma demonstração independente, sem vínculo com a empresa e sem compromisso.\n\nSe gostar da ideia, posso te explicar como colocar esse site no ar. Faz sentido para vocês?\n\nAbraço,\nLucas Scaranello\nscarasoft\n{email_comercial}",
     },
     'redesign': {
         'subject': 'Uma ideia para modernizar o site da {empresa}',
         'short': "Olá! Sou Lucas, da scarasoft. Quem busca, por exemplo, '{busca_exemplo}' pode conhecer a {empresa} pelo site. Uma apresentação profissional ajuda a descobrir os serviços, transmite confiança e facilita o contato. Preparei uma prévia renovada: {preview_url}\nÉ demonstrativa, independente e não oficial; não altera o site atual. O que achou?",
-        'full': "Olá! Sou Lucas, da scarasoft, aqui de Bauru.\n\nConheci o site da {empresa} e preparei uma proposta visual de como ele poderia ficar com uma apresentação mais moderna e um caminho mais direto para o cliente solicitar orçamento.\n\nVocê pode conferir a prévia aqui:\nVer a prévia do site\n\nÉ uma demonstração independente, não oficial e sem compromisso.\n\nSe gostar do resultado, posso explicar como transformar essa prévia no novo site da empresa. Teriam interesse?\n\nAbraço,\nLucas Scaranello\nscarasoft\n{email_comercial}\n{telefone_comercial}",
+        'full': "Olá! Sou Lucas, da scarasoft, aqui de Bauru.\n\nConheci o site da {empresa} e preparei uma proposta visual de como ele poderia ficar com uma apresentação mais moderna e um caminho mais direto para o cliente solicitar orçamento.\n\nVocê pode conferir a prévia aqui:\nVer a prévia do site\n\nÉ uma demonstração independente, não oficial e sem compromisso.\n\nSe gostar do resultado, posso explicar como transformar essa prévia no novo site da empresa. Teriam interesse?\n\nAbraço,\nLucas Scaranello\nscarasoft\n{email_comercial}",
     },
     'site_inoperante': {
         'subject': 'Uma demonstração de site para {empresa}',
         'short': 'Olá! Sou Lucas, da scarasoft. Ao pesquisar a {empresa}, encontrei esta dificuldade ao acessar o site informado: {observacao_verificada}. Uma apresentação profissional ajuda a mostrar os serviços, transmitir confiança e facilitar o contato. Preparei uma prévia: {preview_url}\nÉ demonstrativa, independente, não oficial e sem compromisso. O que achou?',
-        'full': 'Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Ao pesquisar a {empresa}, tentei acessar o site informado e encontrei esta dificuldade: {observacao_verificada}.\n\nQuando alguém procura um serviço pela internet, não conseguir abrir o site pode levar essa pessoa a buscar outra opção. Uma apresentação profissional ajuda a mostrar os serviços, transmitir confiança e facilitar o contato.\n\nPreparei esta prévia demonstrativa:\nVer a prévia do site\n\nEla é independente, não oficial e sem compromisso. Gostaria de saber o que achou.\n\n{assinatura}\n{email_comercial}\n{telefone_comercial}',
+        'full': 'Olá! Tudo bem?\n\nSou Lucas, da scarasoft. Ao pesquisar a {empresa}, tentei acessar o site informado e encontrei esta dificuldade: {observacao_verificada}.\n\nQuando alguém procura um serviço pela internet, não conseguir abrir o site pode levar essa pessoa a buscar outra opção. Uma apresentação profissional ajuda a mostrar os serviços, transmitir confiança e facilitar o contato.\n\nPreparei esta prévia demonstrativa:\nVer a prévia do site\n\nEla é independente, não oficial e sem compromisso. Gostaria de saber o que achou.\n\nLucas Scaranello\nscarasoft\n{email_comercial}',
     },
 }
 

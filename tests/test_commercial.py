@@ -16,16 +16,13 @@ class CommercialTests(unittest.TestCase):
         self.old_db = control.DB
         control.DB = Path(self.tmp.name) / 'ledger.sqlite3'
         self.old_email = os.environ.get('BR_COMMERCIAL_EMAIL')
-        self.old_phone = os.environ.get('BR_COMMERCIAL_PHONE')
         os.environ['BR_COMMERCIAL_EMAIL'] = 'lucas@example.org'
-        os.environ['BR_COMMERCIAL_PHONE'] = '+5514999999999'
         self.batch = control.batch('chaveiros', 'Bauru, SP', 1)['id']
 
     def tearDown(self):
         control.DB = self.old_db
-        for key, value in [('BR_COMMERCIAL_EMAIL',self.old_email),('BR_COMMERCIAL_PHONE',self.old_phone)]:
-            if value is None: os.environ.pop(key,None)
-            else: os.environ[key] = value
+        if self.old_email is None: os.environ.pop('BR_COMMERCIAL_EMAIL',None)
+        else: os.environ['BR_COMMERCIAL_EMAIL'] = self.old_email
         self.tmp.cleanup()
 
     def job(self, presence='sem_site_confirmado', contacts=None):
@@ -38,13 +35,147 @@ class CommercialTests(unittest.TestCase):
                         ('ready','https://preview.example',json.dumps(data),jid))
         return jid
 
+    def valid_email_contacts(self):
+        checked = control.now()[:10]
+        return {'email': {'status':'encontrado', 'value':'public@example.org', 'source':'https://example.org/contato', 'checked_at':checked},
+                'form': {'status':'nao_encontrado', 'source':'https://example.org/contato', 'checked_at':checked}}
+
+    def add_old_phone(self, jid):
+        with control.connect() as con:
+            data = json.loads(con.execute('SELECT data FROM jobs WHERE id=?', (jid,)).fetchone()['data'])
+            data['commercial_contact']['message'] += '\n+55 11 90000-0000'
+            con.execute('UPDATE jobs SET data=? WHERE id=?', (json.dumps(data), jid))
+        return data['commercial_contact']['message']
+
+    def test_explicit_regeneration_preserves_route_and_audit(self):
+        jid = self.job(contacts=self.valid_email_contacts())
+        original = control.prepare_commercial(jid)
+        old_message = self.add_old_phone(jid)
+        before = control.snapshot()
+        self.assertTrue(before['jobs'][0]['commercial_requires_review'])
+        self.assertTrue(before['jobs'][0]['commercial_can_regenerate'])
+        with self.assertRaisesRegex(ValueError, 'already prepared'):
+            control.prepare_commercial(jid)
+        refreshed = control.regenerate_commercial(jid)
+        self.assertEqual((refreshed['channel'], refreshed['destination']), (original['channel'], original['destination']))
+        self.assertEqual(refreshed['message'], original['message'])
+        self.assertFalse(commercial.message_has_phone(refreshed['message']))
+        after = control.snapshot()
+        self.assertFalse(after['jobs'][0]['commercial_requires_review'])
+        self.assertFalse(after['jobs'][0]['commercial_can_regenerate'])
+        self.assertEqual(after['jobs'][0]['contact_status'], 'prepared')
+        self.assertEqual(after['commercial_attempts'], before['commercial_attempts'])
+        self.assertIn('prior_sha256=', after['events'][0]['message'])
+        self.assertIn('new_sha256=', after['events'][0]['message'])
+        self.assertNotIn(old_message, after['events'][0]['message'])
+        with self.assertRaisesRegex(ValueError, 'Only a prepared message'):
+            control.regenerate_commercial(jid)
+
+    def test_regeneration_rejects_changed_route_and_invalid_preview_or_contacts(self):
+        jid = self.job(contacts=self.valid_email_contacts())
+        control.prepare_commercial(jid)
+        old_message = self.add_old_phone(jid)
+        with control.connect() as con:
+            data = json.loads(con.execute('SELECT data FROM jobs WHERE id=?',(jid,)).fetchone()['data'])
+            data['contacts']['email']['value'] = 'changed@example.org'
+            con.execute('UPDATE jobs SET data=? WHERE id=?',(json.dumps(data),jid))
+        self.assertFalse(control.snapshot()['jobs'][0]['commercial_can_regenerate'])
+        with self.assertRaisesRegex(ValueError, 'channel and recipient'):
+            control.regenerate_commercial(jid)
+        with control.connect() as con:
+            data['contacts']['email']['value'] = 'public@example.org'
+            data['contacts']['email']['source'] = ''
+            con.execute('UPDATE jobs SET data=? WHERE id=?',(json.dumps(data),jid))
+        with self.assertRaisesRegex(ValueError, 'contacts'):
+            control.regenerate_commercial(jid)
+        with control.connect() as con:
+            data['contacts']['email']['source'] = 'https://example.org/contato'
+            con.execute('UPDATE jobs SET preview_url=?,data=? WHERE id=?', ('http://preview.example',json.dumps(data),jid))
+        with self.assertRaisesRegex(ValueError, 'verified public preview'):
+            control.regenerate_commercial(jid)
+        self.assertEqual(control.snapshot()['jobs'][0]['data']['commercial_contact']['message'], old_message)
+
+    def test_regeneration_rejects_sent_uncertain_pending_and_optout_history(self):
+        for prior_status in ('sent', 'uncertain', 'attempting', 'opted_out', 'failed_no_send'):
+            with self.subTest(status=prior_status):
+                jid = self.job(contacts=self.valid_email_contacts())
+                control.prepare_commercial(jid)
+                old_message = self.add_old_phone(jid)
+                with control.connect() as con:
+                    con.execute('INSERT INTO commercial_attempts(job_id,channel,status,message,evidence,created_at) VALUES(?,?,?,?,?,?)',
+                                (jid,'email',prior_status,old_message,'Histórico preservado',control.now()))
+                before = control.snapshot()
+                with self.assertRaisesRegex(ValueError, 'attempt|recipient'):
+                    control.regenerate_commercial(jid)
+                after = control.snapshot()
+                self.assertEqual(after['jobs'][0]['data']['commercial_contact']['message'],old_message)
+                self.assertEqual(after['commercial_attempts'],before['commercial_attempts'])
+                self.assertFalse(after['jobs'][0]['commercial_can_regenerate'])
+
+    def test_regeneration_keeps_prior_failed_attempt_and_email_priority(self):
+        contacts = self.valid_email_contacts()
+        contacts['form'] = {'status':'encontrado', 'eligible':True, 'purpose':'contato comercial',
+                            'url':'https://example.org/form', 'source':'https://example.org/form',
+                            'checked_at':control.now()[:10], 'restrictions':[]}
+        jid = self.job(contacts=contacts)
+        self.assertEqual(control.prepare_commercial(jid)['channel'], 'form')
+        control.record_commercial(jid, 'failed_no_send', 'Falhou antes do envio')
+        prepared = control.prepare_commercial(jid)
+        self.assertEqual(prepared['channel'], 'email')
+        self.add_old_phone(jid)
+        prior = control.snapshot()['commercial_attempts']
+        regenerated = control.regenerate_commercial(jid)
+        self.assertEqual((regenerated['channel'],regenerated['destination']), ('email','public@example.org'))
+        self.assertEqual(control.snapshot()['commercial_attempts'],prior)
+
+    def test_regeneration_rejects_legacy_submission(self):
+        jid = self.job(contacts=self.valid_email_contacts())
+        control.prepare_commercial(jid)
+        old_message = self.add_old_phone(jid)
+        with control.connect() as con:
+            con.execute('INSERT INTO submissions VALUES(?,?,?,?,?,?,?)',
+                        (jid,old_message,'old-hash','https://example.org/form','attempting',None,control.now()))
+        with self.assertRaisesRegex(ValueError, 'submission'):
+            control.regenerate_commercial(jid)
+        state = control.snapshot()
+        self.assertEqual(state['jobs'][0]['data']['commercial_contact']['message'],old_message)
+        self.assertFalse(state['jobs'][0]['commercial_can_regenerate'])
+
+    def test_regeneration_uses_current_redesign_and_inoperante_models(self):
+        for presence in ('site_confirmado', 'site_inoperante'):
+            with self.subTest(presence=presence):
+                jid = self.job(presence=presence, contacts=self.valid_email_contacts())
+                observation = ''
+                if presence == 'site_inoperante':
+                    observation = 'HTTP 503 em duas tentativas'
+                    with control.connect() as con:
+                        data = json.loads(con.execute('SELECT data FROM jobs WHERE id=?',(jid,)).fetchone()['data'])
+                        data['verification']['technical_failure'] = {'checked_at':control.now()[:10],
+                            'source':'https://example.org/site', 'result':observation, 'attempts':2}
+                        con.execute('UPDATE jobs SET data=? WHERE id=?',(json.dumps(data),jid))
+                expected = control.prepare_commercial(jid, observation)
+                self.add_old_phone(jid)
+                regenerated = control.regenerate_commercial(jid)
+                self.assertEqual(regenerated['template'],expected['template'])
+                self.assertEqual(regenerated['message'],expected['message'])
+                self.assertFalse(commercial.message_has_phone(regenerated['message']))
+
+    def test_regeneration_never_changes_a_confirmed_send(self):
+        jid = self.job(contacts=self.valid_email_contacts())
+        control.prepare_commercial(jid)
+        old_message = self.add_old_phone(jid)
+        with control.connect() as con:
+            con.execute('UPDATE jobs SET contact_status=? WHERE id=?', ('sent',jid))
+        with self.assertRaisesRegex(ValueError, 'Only a prepared message'):
+            control.regenerate_commercial(jid)
+        self.assertEqual(control.snapshot()['jobs'][0]['data']['commercial_contact']['message'],old_message)
+
     def test_catalog_all_segments_and_messages(self):
         self.assertEqual(set(commercial.SEARCHES), set(control.TEMPLATES))
         values = {'empresa':'Empresa Exemplo','cidade':'Bauru','segmento':'chaveiro',
                   'busca_exemplo':'chaveiro perto de mim','preview_url':'https://preview.example',
                   'observacao_verificada':'HTTP 503 em duas sondagens',
-                  'assinatura':'scarasoft — Lucas Scaranello','email_comercial':'lucas@example.org',
-                  'telefone_comercial':'+5514999999999'}
+                  'email_comercial':'lucas@example.org'}
         for template in commercial.COPY:
             for variant in ('short','full','subject'):
                 rendered = commercial.render(template,variant,values)
@@ -53,6 +184,12 @@ class CommercialTests(unittest.TestCase):
             short = commercial.render(template,'short',values)
             for word in ('serviços','confiança','contato','não oficial'):
                 self.assertIn(word,short)
+            full = commercial.render(template,'full',values)
+            self.assertIn('Lucas Scaranello\nscarasoft\nlucas@example.org',full)
+            self.assertFalse(commercial.message_has_phone(full))
+            self.assertNotIn('+5514999999999',full)
+        self.assertTrue(commercial.message_has_phone('Fale comigo pelo (11) 98888-7777.'))
+        self.assertFalse(commercial.message_has_phone('https://preview.example/11988887777'))
         self.assertIn('chaveiro perto de mim',commercial.render('redesign','short',values))
         for segment, (_, query) in commercial.SEARCHES.items():
             self.assertTrue(query.replace('{cidade}','Bauru'))
@@ -78,6 +215,39 @@ class CommercialTests(unittest.TestCase):
             control.prepare_commercial(jid)
         self.assertEqual(control.snapshot()['jobs'][0]['stage'],'ready')
         self.assertEqual(len(control.snapshot()['commercial_attempts']),2)
+
+    def test_form_and_whatsapp_signatures_have_only_commercial_email(self):
+        form_contacts = {'form': {'status':'encontrado','eligible':True,'purpose':'contato comercial','url':'https://example.org/contato'}}
+        jid = self.job(contacts=form_contacts)
+        form = control.prepare_commercial(jid)
+        self.assertEqual(form['channel'],'form')
+        self.assertTrue(form['message'].endswith('Lucas Scaranello\nscarasoft\nlucas@example.org'))
+        self.assertNotIn('+5514999999999',form['message'])
+        control.record_commercial(jid,'failed_no_send','Nenhum envio ocorreu')
+        with control.connect() as con:
+            data = json.loads(con.execute('SELECT data FROM jobs WHERE id=?',(jid,)).fetchone()['data'])
+            data['contacts'] = {'phone':{'value':'+5514999999999','source':'https://example.org/ficha','checked_at':control.now()[:10]}}
+            con.execute('UPDATE jobs SET data=? WHERE id=?',(json.dumps(data),jid))
+        whatsapp = control.prepare_commercial(jid)
+        self.assertEqual(whatsapp['channel'],'whatsapp_manual')
+        self.assertTrue(whatsapp['message'].endswith('Lucas Scaranello\nscarasoft\nlucas@example.org'))
+        self.assertNotIn('+5514999999999',whatsapp['message'])
+        self.assertIn('wa.me/5514999999999',whatsapp['whatsapp_url'])
+
+    def test_local_env_loader_ignores_legacy_commercial_phone(self):
+        old_root = control.ROOT
+        old_email = os.environ.pop('BR_COMMERCIAL_EMAIL', None)
+        old_phone = os.environ.pop('BR_COMMERCIAL_PHONE', None)
+        try:
+            control.ROOT = Path(self.tmp.name)
+            (control.ROOT / '.env').write_text('BR_COMMERCIAL_EMAIL=contato@scarasoft.com.br\nBR_COMMERCIAL_PHONE=+5511900000000\n')
+            control.load_commercial_env()
+            self.assertEqual(os.environ['BR_COMMERCIAL_EMAIL'],'contato@scarasoft.com.br')
+            self.assertNotIn('BR_COMMERCIAL_PHONE',os.environ)
+        finally:
+            control.ROOT = old_root
+            if old_email is not None: os.environ['BR_COMMERCIAL_EMAIL'] = old_email
+            if old_phone is not None: os.environ['BR_COMMERCIAL_PHONE'] = old_phone
 
     def test_manual_whatsapp_not_sent_and_opt_out(self):
         jid = self.job(contacts={'phone':{'value':'+5514999999999','source':'https://example.org/ficha','checked_at':control.now()[:10]},'whatsapp':{'status':'presumido'}})

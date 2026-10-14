@@ -18,19 +18,16 @@ class WorkflowTests(unittest.TestCase):
         self.old_db = control.DB
         self.old_auth = control.OUTREACH_AUTH_FILE
         self.old_email = os.environ.get('BR_COMMERCIAL_EMAIL')
-        self.old_phone = os.environ.get('BR_COMMERCIAL_PHONE')
         control.DB = Path(self.tmp.name) / 'ledger.db'
         control.OUTREACH_AUTH_FILE = Path(self.tmp.name) / 'authorization.json'
         os.environ['BR_COMMERCIAL_EMAIL'] = 'scarasoft@example.org'
-        os.environ['BR_COMMERCIAL_PHONE'] = '+55 14 90000-0000'
         self.bid = control.batch('electrician', 'Bauru, SP', 1)['id']
 
     def tearDown(self):
         control.DB = self.old_db
         control.OUTREACH_AUTH_FILE = self.old_auth
-        for key, value in (('BR_COMMERCIAL_EMAIL', self.old_email), ('BR_COMMERCIAL_PHONE', self.old_phone)):
-            if value is None: os.environ.pop(key, None)
-            else: os.environ[key] = value
+        if self.old_email is None: os.environ.pop('BR_COMMERCIAL_EMAIL', None)
+        else: os.environ['BR_COMMERCIAL_EMAIL'] = self.old_email
         self.tmp.cleanup()
 
     def add(self, name='Ficticia Eletrica', url='https://ficticia.example', aliases=()):
@@ -344,7 +341,7 @@ class WorkflowTests(unittest.TestCase):
             'batch_id': self.bid, 'industry': 'electrician', 'city': 'Bauru, SP', 'max_contacts': limit}))
 
     def message(self):
-        return 'Proposta\nhttps://preview.example\nscarasoft@example.org\n+55 14 90000-0000\nscarasoft — Lucas Scaranello'
+        return 'Proposta\nhttps://preview.example\nLucas Scaranello\nscarasoft\nscarasoft@example.org'
 
     def contact_ready(self):
         jid = self.add()
@@ -364,8 +361,10 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'scope'):
             control.contact_begin(jid, 'codex', self.message(), 'https://ficticia.example/contato')
         self.authorize()
-        with self.assertRaisesRegex(ValueError, 'signature'):
+        with self.assertRaisesRegex(ValueError, 'identity'):
             control.contact_begin(jid, 'codex', 'https://preview.example', 'https://ficticia.example/contato')
+        with self.assertRaisesRegex(ValueError, 'phone number'):
+            control.contact_begin(jid, 'codex', self.message() + '\n+55 14 90000-0000', 'https://ficticia.example/contato')
         with control.connect() as con:
             self.assertEqual(con.execute('SELECT COUNT(*) FROM submissions').fetchone()[0], 0)
 

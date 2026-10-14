@@ -141,6 +141,45 @@ test('mensagem de e-mail preparada mostra simulação e não oferece preparo dup
   assert.doesNotMatch(html, /id="prepare-commercial"/);
 });
 
+test('mensagem antiga com telefone exige revisão e não oferece ações de envio ou cópia', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.gmail_authorization = { "job-1": { mode: "live", authorized: true, sender: "scarasoftbauru@gmail.com", reason: "Autorizado" } }; this.commercialSection = commercialSection; this.manualOutreach = manualOutreach; this.contactSimulation = contactSimulation;', display);
+  const job = { id: 'job-1', stage: 'ready', contact_status: 'prepared', commercial_requires_review: true, preview_url: 'https://preview.example', data: { preview_verified: true, commercial_contact: { channel: 'email', destination: 'empresa@example.org', subject: 'Proposta', message: 'Mensagem antiga' } } };
+  let html = display.commercialSection(job);
+  assert.match(html, /revise antes de qualquer envio/);
+  assert.doesNotMatch(html, /id="copy-commercial"|id="gmail-send"|id="gmail-simulate"/);
+  job.data.commercial_contact = { channel: 'whatsapp_manual', message: 'Mensagem antiga', whatsapp_url: 'https://wa.me/5514999999999?text=Mensagem' };
+  html = display.commercialSection(job);
+  assert.doesNotMatch(html, /Abrir WhatsApp com texto|id="copy-commercial"/);
+  job.stage = 'manual';
+  job.data.manual_outreach = { message: 'Mensagem antiga', phone: '+5514999999999' };
+  assert.doesNotMatch(display.manualOutreach(job), /id="copy-message"/);
+  assert.match(display.manualOutreach(job), /Telefone verificado/);
+  job.stage = 'simulated';
+  job.data.contact_simulation = { message: 'Mensagem antiga' };
+  assert.doesNotMatch(display.contactSimulation(job), /id="copy-message"/);
+});
+
+test('regeneração aparece somente para mensagem antiga elegível e bloqueada para revisão', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nthis.commercialSection = commercialSection;', display);
+  const job = { id: 'job-1', stage: 'ready', contact_status: 'prepared', commercial_requires_review: true, commercial_can_regenerate: true, preview_url: 'https://preview.example', data: { preview_verified: true, commercial_contact: { channel: 'email', destination: 'empresa@example.org', subject: 'Proposta', message: 'Mensagem antiga com telefone' } } };
+  let html = display.commercialSection(job);
+  assert.match(html, /id="regenerate-commercial"/);
+  assert.match(html, /Regenerar mensagem sem telefone/);
+  assert.doesNotMatch(html, /id="gmail-send"|id="gmail-simulate"|id="copy-commercial"/);
+
+  job.commercial_can_regenerate = false;
+  html = display.commercialSection(job);
+  assert.match(html, /Mensagem com número de telefone/);
+  assert.doesNotMatch(html, /id="regenerate-commercial"/);
+
+  job.commercial_can_regenerate = true;
+  job.contact_status = 'sent';
+  html = display.commercialSection(job);
+  assert.doesNotMatch(html, /id="regenerate-commercial"/);
+});
+
 test('acompanhamento mostra datas e ação apenas quando vencido e autorizado', () => {
   const display = vm.createContext({ URL, Intl, Date });
   vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.gmail_authorization = { "job-1": { mode: "live", authorized: true, sender: "scarasoftbauru@gmail.com", reason: "Autorizado" } }; state.gmail_followups = { "job-1": { available: true, first_sent_at: "2026-10-01T12:00:00+00:00", day4_due_at: "2026-10-05T12:00:00+00:00", day10_due_at: "2026-10-11T12:00:00+00:00", day4_status: "pending", day10_status: "pending", next_touch: 1, due: true, message: "Olá!" } }; this.commercialSection = commercialSection;', display);

@@ -43,20 +43,18 @@ class GmailTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.old_db = control.DB
         self.old_files = (gmail.AUTH_FILE, gmail.SENDER_FILE)
-        self.old_env = (os.environ.get('BR_COMMERCIAL_EMAIL'), os.environ.get('BR_COMMERCIAL_PHONE'))
+        self.old_email = os.environ.get('BR_COMMERCIAL_EMAIL')
         control.DB = Path(self.tmp.name) / 'ledger.sqlite3'
         gmail.AUTH_FILE = Path(self.tmp.name) / 'gmail-authorization.json'
         gmail.SENDER_FILE = Path(self.tmp.name) / 'gmail-sender.json'
         os.environ['BR_COMMERCIAL_EMAIL'] = 'lucas@example.org'
-        os.environ['BR_COMMERCIAL_PHONE'] = '+5514999999999'
         self.batch = control.batch('chaveiros', 'Bauru, SP', 3)['id']
         self.job = self.new_job('Empresa Um', 'first@example.org')
     def tearDown(self):
         control.DB = self.old_db
         gmail.AUTH_FILE, gmail.SENDER_FILE = self.old_files
-        for key, value in zip(('BR_COMMERCIAL_EMAIL','BR_COMMERCIAL_PHONE'),self.old_env):
-            if value is None: os.environ.pop(key,None)
-            else: os.environ[key] = value
+        if self.old_email is None: os.environ.pop('BR_COMMERCIAL_EMAIL',None)
+        else: os.environ['BR_COMMERCIAL_EMAIL'] = self.old_email
         self.tmp.cleanup()
     def private(self, path, data):
         path.write_text(json.dumps(data))
@@ -150,11 +148,49 @@ class GmailTests(unittest.TestCase):
         self.assertEqual(result['gmail_message_id'],'gmail12345678')
         self.assertEqual(result['gmail_thread_id'],'thread12345678')
         self.assertEqual(fake.calls,1)
+        self.assertIn('Lucas Scaranello\nscarasoft\nlucas@example.org',fake.last_send[3])
+        self.assertNotIn('+5514999999999',fake.last_send[3])
         state = control.snapshot()
         self.assertEqual(state['jobs'][0]['stage'],'ready')
         self.assertEqual(state['jobs'][0]['contact_status'],'sent')
         self.assertEqual(state['commercial_attempts'][0]['source'],'gmail_api')
         with self.assertRaises(ValueError): self.dispatch(client=fake)
+    def test_followups_do_not_include_phone(self):
+        for touch in (1, 2):
+            message = gmail.followup_message('Empresa Um', touch)
+            self.assertFalse(control.commercial.message_has_phone(message))
+            self.assertNotIn('+5514999999999', message)
+    def test_old_prepared_signature_is_blocked_without_changing_history(self):
+        prepared = self.prepare(); self.authorize()
+        old_message = prepared['message'].replace('lucas@example.org', 'lucas@example.org\n+55 14 90000-0000')
+        with control.connect() as c:
+            row = c.execute('SELECT data FROM jobs WHERE id=?',(self.job,)).fetchone()
+            data = json.loads(row['data'])
+            data['commercial_contact']['message'] = old_message
+            c.execute('UPDATE jobs SET data=? WHERE id=?',(json.dumps(data),self.job))
+        before = control.snapshot()
+        self.assertTrue(before['jobs'][0]['commercial_requires_review'])
+        self.assertFalse(gmail.simulate(control.gmail_ledger(),self.job)['commercial_eligibility']['eligible'])
+        fake = FakeGmail()
+        with self.assertRaisesRegex(ValueError,'phone number'):
+            self.dispatch(client=fake)
+        after = control.snapshot()
+        self.assertEqual(fake.calls,0)
+        self.assertEqual(after['commercial_attempts'],before['commercial_attempts'])
+        self.assertEqual(after['jobs'][0]['data']['commercial_contact']['message'],old_message)
+    def test_sent_history_is_not_rewritten_when_old_signature_is_present(self):
+        self.prepare(); self.authorize()
+        result = self.dispatch()
+        with control.connect() as c:
+            data = json.loads(c.execute('SELECT data FROM jobs WHERE id=?',(self.job,)).fetchone()['data'])
+            data['commercial_contact']['message'] += '\n+55 14 90000-0000'
+            c.execute('UPDATE jobs SET data=? WHERE id=?',(json.dumps(data),self.job))
+        state = control.snapshot()
+        self.assertEqual(state['jobs'][0]['contact_status'],'sent')
+        self.assertFalse(state['jobs'][0]['commercial_requires_review'])
+        self.assertEqual(state['commercial_attempts'][0]['id'],result['attempt_id'])
+        self.assertEqual(state['commercial_attempts'][0]['status'],'sent')
+        self.assertEqual(state['commercial_attempts'][0]['gmail_message_id'],'gmail12345678')
     def test_confirmed_gmail_response_and_optout_need_no_new_send_proof(self):
         self.prepare(); self.authorize()
         result = self.dispatch()
