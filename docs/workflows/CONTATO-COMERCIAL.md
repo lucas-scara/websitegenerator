@@ -1,6 +1,6 @@
 # Motor comercial determinístico
 
-Esta fase prepara mensagens e permite registrar resultados observados. O envio de e-mail preparado pelo Gmail é opcional e exige a configuração e a autorização local de [ENVIO-GMAIL.md](ENVIO-GMAIL.md). Não envia formulários nem WhatsApp. O lote de prévias continua concluído pela quantidade de URLs públicas verificadas, independentemente do estado comercial.
+Quando `preview-finish` confirma uma prévia pública verificada, o backend tenta preparar a mensagem automaticamente; essa etapa nunca envia contato. Se faltar dado ou configuração, o registro fica pendente e o dashboard apresenta o impedimento. A revisão comercial e a aprovação única dos destinatários selecionados ocorrem por lote no dashboard; o backend inicia então o despacho sequencial Gmail apenas para canais `email`. Consulte [ENVIO-GMAIL.md](ENVIO-GMAIL.md). Formulários não são enviados automaticamente e WhatsApp permanece manual.
 
 ## Decisões
 
@@ -12,7 +12,7 @@ Esta fase prepara mensagens e permite registrar resultados observados. O envio d
 
 ## Uso local
 
-Abra o dashboard, selecione uma prévia verificada e clique em **Preparar mensagem**. Para site inoperante, informe exatamente o resultado técnico já documentado em `verification.technical_failure.result`. Revise o canal, assunto, texto e destinatário. Copie a mensagem ou abra o link de WhatsApp; nenhuma dessas ações altera o status para enviado. Após observar um envio, use **Registrar resultado**, informe a evidência e o comprovante. Para contato externo já realizado, selecione **Contato externo comprovado** e indique o canal usado. Respostas, interesse, falta de interesse e opt-out também são registros manuais. A seção de produção continua mostrando a prévia publicada depois do contato.
+A preparação normal é acionada por `preview-finish` após publicação e verificação HTTPS. Para site inoperante, o motor usa o resultado técnico já documentado em `verification.technical_failure.result`. Revise canal, assunto, texto e destinatário na visão comercial do lote. A seleção e aprovação explícitas dos contatos elegíveis por e-mail iniciam o Gmail, conforme [ENVIO-GMAIL.md](ENVIO-GMAIL.md). Para uso manual de WhatsApp ou registro histórico, abrir/copiar a mensagem não altera o estado para enviado; após observar contato externo, use **Registrar resultado**, informe a evidência e o comprovante. Para contato externo já realizado, selecione **Contato externo comprovado** e indique o canal usado. Respostas, interesse, falta de interesse e opt-out também são registros manuais. A seção de produção continua mostrando a prévia publicada depois do contato.
 
 CLI equivalente:
 
@@ -24,6 +24,6 @@ python3 tools/control.py commercial-record --job ID --status sent_external --cha
 python3 tools/control.py commercial-record --job ID --status failed_no_send --evidence 'Falha antes de qualquer envio...'
 ```
 
-Se o destino não tiver canal adequado, a preparação retorna `no_channel` e indica pesquisar contato público. `commercial-prepare` e `commercial-record` não enviam mensagens externas. O envio Gmail exige comando/ação separado e autorização específica. Os comandos legados de envio de formulário seguem com autorização própria do lote e não são usados por este motor.
+Se o destino não tiver canal adequado, a preparação retorna `no_channel` e indica pesquisar contato público. `commercial-prepare` e `commercial-record` não enviam mensagens externas. O envio Gmail é iniciado pela ação de aprovação do lote no dashboard e usa autorização restrita aos destinatários escolhidos. Os comandos legados de envio de formulário seguem com autorização própria do lote e não são usados por este motor.
 
 Mensagens preparadas antes da remoção do telefone podem continuar no SQLite. O dashboard as marca para revisão e oculta cópia, envio Gmail e abertura direta do WhatsApp; o backend também recusa o envio da assinatura antiga. Para uma mensagem ainda não enviada e sem tentativa pendente, incerta ou opt-out, o dashboard oferece **Regenerar mensagem sem telefone**. A ação revalida prévia, contatos, canal e destinatário, usa o modelo atual e registra os hashes da mensagem antiga e da nova em `events`. Ela também está disponível por `python3 tools/control.py commercial-regenerate --job ID`. Tentativas anteriores e mensagens já enviadas não são alteradas. Se o canal ou destinatário mudou, a ação permanece indisponível e o operador deve revisar o caso; não há substituição automática.

@@ -2,6 +2,7 @@
 const $ = (selector) => document.querySelector(selector);
 const state = { batches: [], jobs: [], events: [], workers: [], operations: [], stage_runs: [], templates: [], commercial_attempts: [], legacy_submissions: [], gmail_authorization: {}, gmail_followups: {}, settings: { batch_size: 3, max_workers: 3 } };
 let batchFilter = 'all', stageFilter = 'all', selectedJob = null, previousSignature = '', connected = false;
+const commercialSelection = new Map();
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const STAGES = { queued: 'Na fila', reviewing: 'Em análise', extracting: 'Coletando dados', building: 'Gerando', checking: 'Verificando', deploying: 'Publicando', ready: 'Prévia pronta', contacting: 'Tentativa de contato', complete: 'Contato efetuado', sent: 'Enviado', sent_external: 'Contato externo comprovado', uncertain: 'Resultado incerto', blocked: 'Bloqueado', skipped: 'Ignorado', manual: 'Contato manual', simulated: 'Simulado', pending: 'Pendente', prepared: 'Preparado', replied: 'Respondeu', interested: 'Interessado', not_interested: 'Sem interesse', opted_out: 'Não contatar', failed_no_send: 'Falha sem envio', whatsapp_manual: 'WhatsApp manual', no_channel: 'Sem canal', form: 'Formulário', email: 'E-mail', not_sent: 'Não enviado', attempting: 'Tentativa reservada', submitted: 'Enviado', manual_required: 'Contato manual necessário' };
 const production = (job) => job.data?.preview_verified === true && safeURL(job.preview_url) ? 'Prévia verificada' : label(job.stage);
@@ -104,7 +105,7 @@ function commercialSection(job) {
   const previewHref = safeURL(job.preview_url);
   const gmailAttempt = attempts.find(item => item.source === 'gmail_api');
   const gmailSender = gmailAttempt?.sender || auth.sender || 'Não configurado';
-  const gmailControls = current === 'prepared' && !requiresReview ? `<p>Autorização: ${escapeHTML(auth.mode)} · ${escapeHTML(auth.reason)}</p><button type="button" id="gmail-simulate">Simular envio</button>${auth.authorized ? '<button type="button" id="gmail-send">Enviar via Gmail</button>' : ''}` : current === 'uncertain' ? `<p>Resultado incerto: reconcilie a tentativa${gmailAttempt ? ' Gmail' : ''} antes de qualquer novo envio.</p>` : '';
+  const gmailControls = current === 'prepared' && !requiresReview ? `<p>Autorização: ${escapeHTML(auth.mode)} · ${escapeHTML(auth.reason)}</p><button type="button" id="gmail-simulate">Simular envio</button><p>Envios reais são autorizados pela revisão do lote comercial.</p>` : current === 'uncertain' ? `<p>Resultado incerto: reconcilie a tentativa${gmailAttempt ? ' Gmail' : ''} antes de qualquer novo envio.</p>` : '';
   const gmailPanel = contact.channel === 'email' && contact.message ? `<div class="gmail-panel"><div class="meta-label">Envio Gmail</div><p>Destinatário: ${escapeHTML(contact.destination || 'Indisponível')} · Remetente: ${escapeHTML(gmailSender)}</p><p>Assunto: ${escapeHTML(contact.subject || 'Indisponível')}</p><p>Prévia: ${escapeHTML((contact.message || '').slice(0, 180))}</p>${previewHref ? `<p><a href="${escapeHTML(previewHref)}" target="_blank" rel="noopener noreferrer">Ver a prévia do site ↗</a></p>` : ''}${gmailControls}</div>` : '';
   const followup = state.gmail_followups?.[job.id] || {};
   const followupPanel = followup.available ? `<div class="gmail-panel"><div class="meta-label">Acompanhamento por e-mail</div><p>Primeiro envio: ${escapeHTML(time(followup.first_sent_at))}</p><p>Dia 4: ${escapeHTML(time(followup.day4_due_at))} · ${escapeHTML(label(followup.day4_status))}</p><p>Dia 10: ${escapeHTML(time(followup.day10_due_at))} · ${escapeHTML(label(followup.day10_status))}</p>${followup.next_touch ? `<p>${followup.due ? 'Follow-up disponível para revisão' : 'Próximo follow-up em ' + escapeHTML(time(followup.due_at))}</p><label class="meta-label" for="followup-message">Mensagem do dia ${followup.next_touch === 1 ? '4' : '10'}</label><textarea id="followup-message" readonly rows="7">${escapeHTML(followup.message)}</textarea>${followup.due && auth.authorized ? `<button type="button" id="gmail-followup" data-touch="${followup.next_touch}">Enviar follow-up na mesma conversa</button>` : ''}` : `<p>${escapeHTML(followup.reason || '')}</p>`}</div>` : '';
@@ -169,6 +170,45 @@ function category(job) {
   if (job.preview_url || ['published', 'deployed', 'ready'].includes(job.stage)) return 'ready';
   return 'working';
 }
+function commercialApprovalPayload(batchId, jobIds, rows) {
+  const byId = new Map((Array.isArray(rows) ? rows : []).map(row => [String(row.job_id), row]));
+  const reviewed = {};
+  for (const id of jobIds) {
+    const row = byId.get(String(id));
+    if (!row || row.eligible !== true || row.channel !== 'email' || typeof row.approval_digest !== 'string' || !row.approval_digest) {
+      throw new Error(`A revisão de ${id} não está mais válida. Atualize o lote e revise novamente.`);
+    }
+    reviewed[String(id)] = row.approval_digest;
+  }
+  return { batch_id: batchId, job_ids: jobIds, reviewed };
+}
+function commercialDuration(duration) {
+  if (Number.isFinite(Number(duration)) && duration !== null && typeof duration !== 'object') return `${Number(duration).toFixed(1)} s`;
+  if (!duration || typeof duration !== 'object' || Array.isArray(duration)) return 'indisponível';
+  const entries = Object.entries(duration).filter(([, value]) => Number.isFinite(Number(value)) && value !== null);
+  if (!entries.length) return 'indisponível';
+  const total = entries.reduce((sum, [, value]) => sum + Number(value), 0);
+  return `${total.toFixed(1)} s (${entries.map(([stage, value]) => `${escapeHTML(label(stage)).replace(/^./, char => char.toLocaleUpperCase('pt-BR'))}: ${Number(value).toFixed(1)} s`).join(' · ')})`;
+}
+function commercialBatchesHTML(batches = {}) {
+  const entries = Object.entries(batches || {});
+  if (!entries.length) return '<div class="empty commercial-empty"><div><h3>Nenhuma mensagem preparada</h3><p>As empresas elegíveis aparecerão aqui depois da verificação da prévia.</p></div></div>';
+  return entries.map(([batchId, batch]) => {
+    const rows = Array.isArray(batch.rows) ? batch.rows : [];
+    const counts = batch.counts || {}, capacity = batch.capacity || {};
+    const selected = commercialSelection.get(String(batchId)) || new Set();
+    const eligibleSelected = rows.filter(row => row.eligible === true && row.channel === 'email' && selected.has(String(row.job_id)));
+    const rowHTML = rows.map(row => {
+      const canSelect = row.eligible === true && row.channel === 'email';
+      const checked = canSelect && selected.has(String(row.job_id));
+      const blockers = Array.isArray(row.blockers) ? row.blockers : [];
+      return `<article class="commercial-row"><label class="commercial-select"><input type="checkbox" data-commercial-select="${escapeHTML(batchId)}" data-job-id="${escapeHTML(row.job_id)}"${checked ? ' checked' : ''}${canSelect ? '' : ' disabled'} aria-label="Selecionar ${escapeHTML(row.name)}"></label><div class="commercial-row-main"><div class="commercial-row-title"><strong>${escapeHTML(row.name || 'Empresa sem nome')}</strong><span>${escapeHTML(row.segment || '')} · ${escapeHTML(row.opportunity_type || 'Oportunidade pendente')}</span></div><p class="commercial-preview">${safeURL(row.preview_url) ? `<a href="${escapeHTML(safeURL(row.preview_url))}" target="_blank" rel="noopener noreferrer">Prévia publicada ↗</a>` : 'Prévia indisponível'} · ${escapeHTML(row.recipient || 'Sem destinatário')} · Canal: ${escapeHTML(label(row.channel || 'no_channel'))}</p><p><strong>Assunto:</strong> ${escapeHTML(row.subject || 'Indisponível')}</p><pre class="commercial-message">${escapeHTML(row.message || 'Mensagem não preparada')}</pre><div class="commercial-row-status ${row.eligible ? 'eligible' : 'blocked'}">${row.eligible ? 'Elegível para Gmail' : 'Bloqueado'} · ${escapeHTML(label(row.status || 'prepared'))}${blockers.length ? `<ul>${blockers.map(item => `<li>${escapeHTML(item)}</li>`).join('')}</ul>` : ''}</div></div></article>`;
+    }).join('');
+    const approvable = Number(capacity.approvable_now ?? capacity.remaining_batch ?? eligibleSelected.length);
+    const batchStatus = counts.sending ? 'Envio em andamento' : counts.uncertain ? 'Resultado incerto' : counts.blocked ? 'Bloqueadas' : counts.sent ? 'Enviadas' : eligibleSelected.length ? 'Aguardando aprovação' : 'Mensagens preparadas';
+    return `<section class="commercial-batch" data-batch-id="${escapeHTML(batchId)}"><header class="commercial-batch-header"><div><span class="eyebrow">Lote ${escapeHTML(batchId)}</span><h3>${escapeHTML(batchStatus)}</h3></div><div class="commercial-counts">Prospectadas ${escapeHTML(counts.prospected ?? rows.length)} · Em produção ${escapeHTML(counts.in_production ?? 0)} · Prévias verificadas ${escapeHTML(counts.previews_verified ?? 0)} · Mensagens preparadas ${escapeHTML(counts.messages_prepared ?? rows.length)} · Aguardando aprovação ${escapeHTML(counts.awaiting_approval ?? 0)} · Envio em andamento ${escapeHTML(counts.sending ?? 0)} · Enviadas ${escapeHTML(counts.sent ?? 0)} · Bloqueadas ${escapeHTML(counts.blocked ?? 0)} · Resultado incerto ${escapeHTML(counts.uncertain ?? 0)}</div></header><div class="commercial-rows">${rowHTML || '<p>Nenhum contato comercial neste lote.</p>'}</div><footer class="commercial-batch-footer"><span>Capacidade: ${escapeHTML(capacity.prior_attempts ?? 0)} tentativas anteriores · ${escapeHTML(capacity.remaining_batch ?? 0)} restantes no lote · ${escapeHTML(capacity.remaining_daily ?? 0)} restantes hoje · esta aprovação permitirá até ${escapeHTML(Math.min(approvable, eligibleSelected.length))} envio(s) selecionado(s) · Duração total e por etapa: ${commercialDuration(batch.duration_seconds)}</span><button type="button" class="primary commercial-approve" data-approve-batch="${escapeHTML(batchId)}"${eligibleSelected.length && approvable > 0 ? '' : ' disabled'}>Aprovar seleção e iniciar envio</button><span class="commercial-feedback" role="status" aria-live="polite"></span></footer></section>`;
+  }).join('');
+}
 function jobCard(job, index) {
   const initials = String(job.name || '?').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
   const followup = state.gmail_followups?.[job.id];
@@ -177,6 +217,7 @@ function jobCard(job, index) {
   return `<button class="job-card${isManual(job) ? ' manual-card' : ''}" data-job="${escapeHTML(job.id)}" aria-label="Abrir detalhes de ${escapeHTML(job.name || 'empresa')}"><div class="job-cover"><span class="job-number">${String(index + 1).padStart(2, '0')}</span><span class="cover-monogram" aria-hidden="true">${escapeHTML(initials)}</span><span class="cover-caption">${job.preview_url ? 'Prévia ↗' : ''}</span></div><div class="job-info"><h3>${escapeHTML(job.name || 'Empresa sem nome')}</h3><div class="job-domain">${escapeHTML(job.domain || 'Sem site próprio registrado')}</div><p class="job-detail">${escapeHTML(job.data?.commercial_category || 'Sem categoria')} · ${escapeHTML(job.data?.opportunity_type || 'Tipo pendente')}</p><p class="job-detail">Contato: ${escapeHTML(label(job.contact_status || 'not_sent'))}</p><p class="job-detail">Próxima ação: ${escapeHTML(nextCommercialAction(job))}</p>${followupHint}${detail ? `<p class="job-detail">${escapeHTML(detail)}</p>` : ''}<div class="job-bottom"><span class="stage ${productionCategory(job)}">Produção: ${escapeHTML(production(job))}</span><span class="job-arrow" aria-hidden="true">↗</span></div></div></button>`;
 }
 function render() {
+  $('#commercial-batches').innerHTML = commercialBatchesHTML(state.commercial_batches);
   const batches = state.batches;
   if (batchFilter !== 'all' && !batches.some(batch => String(batch.id) === batchFilter)) batchFilter = 'all';
   const select = $('#batch-filter');
@@ -246,6 +287,7 @@ async function poll() {
     const data = await response.json();
     for (const key of ['batches', 'jobs', 'events', 'workers', 'operations', 'stage_runs', 'templates', 'commercial_attempts', 'legacy_submissions']) state[key] = Array.isArray(data[key]) ? data[key] : [];
     state.settings = data.settings || state.settings;
+    state.commercial_batches = data.commercial_batches || {};
     state.gmail_authorization = data.gmail_authorization || {};
     state.gmail_followups = data.gmail_followups || {};
     const choices = '<option value="">Selecione o segmento</option><option value="all">Todos os segmentos</option>' + state.templates.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join('');
@@ -282,6 +324,38 @@ $('#batch-form').addEventListener('submit', async (event) => {
   finally { button.disabled = false; }
 });
 $('#batch-filter').addEventListener('change', event => { batchFilter = event.target.value; render(); });
+$('#commercial-batches').addEventListener('change', event => {
+  const input = event.target.closest('[data-commercial-select]');
+  if (!input) return;
+  const batchId = String(input.dataset.commercialSelect), jobId = String(input.dataset.jobId);
+  const selected = commercialSelection.get(batchId) || new Set();
+  if (input.checked) selected.add(jobId); else selected.delete(jobId);
+  commercialSelection.set(batchId, selected);
+  render();
+});
+$('#commercial-batches').addEventListener('click', async event => {
+  const button = event.target.closest('[data-approve-batch]');
+  if (!button) return;
+  const batchId = String(button.dataset.approveBatch), jobIds = [...(commercialSelection.get(batchId) || new Set())];
+  if (!jobIds.length) return;
+  const feedback = button.parentElement.querySelector('.commercial-feedback');
+  button.disabled = true;
+  feedback.textContent = 'Registrando aprovação e iniciando despacho sequencial…';
+  try {
+    const batch = state.commercial_batches?.[batchId];
+    const payload = commercialApprovalPayload(batchId, jobIds, batch?.rows);
+    const response = await fetch('/api/commercial/batch-approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'A aprovação do lote foi recusada.');
+    commercialSelection.delete(batchId);
+    feedback.textContent = `Aprovado. Capacidade restante: ${data.capacity?.remaining_batch ?? '—'} no lote e ${data.capacity?.remaining_daily ?? '—'} hoje. Despacho iniciado; acompanhe os resultados abaixo.`;
+    previousSignature = '';
+    await poll();
+  } catch (error) {
+    feedback.textContent = error.message;
+    button.disabled = false;
+  }
+});
 $('#stage-filters').addEventListener('click', event => {
   const button = event.target.closest('[data-filter]');
   if (!button) return;
@@ -295,7 +369,7 @@ $('#jobs').addEventListener('click', event => {
   selectedJob = card.dataset.job; renderDialog(); $('#job-dialog').showModal();
 });
 $('#dialog-content').addEventListener('click', async event => {
-  if (['gmail-simulate', 'gmail-send', 'gmail-followup'].includes(event.target.id)) {
+  if (['gmail-simulate', 'gmail-followup'].includes(event.target.id)) {
     const button = event.target;
     button.disabled = true;
     try {

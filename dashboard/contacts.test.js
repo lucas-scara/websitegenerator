@@ -128,7 +128,7 @@ test('cartão de prévia verificada e envio confirmado oculta andamento legado n
   assert.match(display.jobCard({ ...job, data: { preview_verified: false } }, 0), /Na fila/);
 });
 
-test('mensagem de e-mail preparada mostra simulação e não oferece preparo duplicado', () => {
+test('mensagem de e-mail preparada mostra simulação e não oferece envio individual', () => {
   const display = vm.createContext({ URL, Intl, Date });
   vm.runInContext(app.slice(0, app.indexOf('function category(job)')) + '\nstate.gmail_authorization = { "job-1": { mode: "live", authorized: true, sender: "scarasoftbauru@gmail.com", reason: "Autorizado" } }; this.commercialSection = commercialSection;', display);
   const job = { id: 'job-1', stage: 'ready', contact_status: 'prepared', preview_url: 'https://preview.example',
@@ -137,8 +137,58 @@ test('mensagem de e-mail preparada mostra simulação e não oferece preparo dup
   assert.match(html, /Destinatário: empresa@example.org/);
   assert.match(html, /Remetente: scarasoftbauru@gmail.com/);
   assert.match(html, /id="gmail-simulate"/);
-  assert.match(html, /id="gmail-send"/);
+  assert.doesNotMatch(html, /id="gmail-send"/);
+  assert.match(html, /revisão do lote comercial/);
   assert.doesNotMatch(html, /id="prepare-commercial"/);
+});
+
+test('visão de lote mostra mensagem integral, capacidade e permite selecionar apenas e-mail elegível', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function jobCard(job, index)')) + '\nthis.commercialBatchesHTML = commercialBatchesHTML;', display);
+  const html = display.commercialBatchesHTML({ lote1: { rows: [
+    { job_id: 'j1', name: 'Oficina Um', segment: 'Oficina', opportunity_type: 'Sem site', preview_url: 'https://example.org/p', recipient: 'a@example.org', subject: 'Assunto', message: 'Mensagem completa sem corte.', channel: 'email', eligible: true, blockers: [] },
+    { job_id: 'j2', name: 'Oficina Dois', recipient: '14 99999-1111', channel: 'whatsapp_manual', eligible: true, blockers: [] },
+    { job_id: 'j3', name: 'Oficina Três', recipient: 'b@example.org', channel: 'email', eligible: false, blockers: ['Opt-out registrado'] }
+  ], counts: { prospected: 3, in_production: 1, previews_verified: 2, messages_prepared: 2, awaiting_approval: 1, sending: 0, sent: 1, blocked: 1, uncertain: 0 }, duration_seconds: { discovery: 4, publish: 8 }, capacity: { prior_attempts: 1, remaining_batch: 4, remaining_daily: 8, approvable_now: 4 } } });
+  assert.match(html, /Mensagem completa sem corte\./);
+  assert.match(html, /<strong>Assunto:<\/strong>/);
+  assert.match(html, /Em produção 1/);
+  assert.match(html, /Prévias verificadas 2/);
+  assert.match(html, /Mensagens preparadas 2/);
+  assert.match(html, /disabled aria-label="Selecionar Oficina Dois"/);
+  assert.match(html, /disabled aria-label="Selecionar Oficina Três"/);
+  assert.match(html, /Opt-out registrado/);
+  assert.match(html, /1 tentativas anteriores/);
+  assert.match(html, /12\.0 s/);
+  assert.match(html, /Discovery: 4\.0 s/);
+  assert.doesNotMatch(html, /javascript:/);
+});
+
+test('aprovação inclui hash revisado de cada contato e recusa linha inelegível ou desatualizada', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function jobCard(job, index)')) + '\nthis.commercialApprovalPayload = commercialApprovalPayload;', display);
+  const rows = [
+    { job_id: 'a', eligible: true, channel: 'email', approval_digest: 'sha256:a' },
+    { job_id: 'b', eligible: true, channel: 'email', approval_digest: 'sha256:b' },
+    { job_id: 'c', eligible: false, channel: 'email', approval_digest: 'sha256:c' }
+  ];
+  assert.deepEqual(JSON.parse(JSON.stringify(display.commercialApprovalPayload('batch-x', ['a', 'b'], rows))), {
+    batch_id: 'batch-x', job_ids: ['a', 'b'], reviewed: { a: 'sha256:a', b: 'sha256:b' }
+  });
+  assert.throws(() => display.commercialApprovalPayload('batch-x', ['c'], rows), /não está mais válida/);
+  assert.throws(() => display.commercialApprovalPayload('batch-x', ['missing'], rows), /não está mais válida/);
+  rows[0].approval_digest = '';
+  assert.throws(() => display.commercialApprovalPayload('batch-x', ['a'], rows), /não está mais válida/);
+});
+
+test('aprovação fica desabilitada sem seleção e lote vazio orienta o operador', () => {
+  const display = vm.createContext({ URL, Intl, Date });
+  vm.runInContext(app.slice(0, app.indexOf('function jobCard(job, index)')) + '\nthis.commercialBatchesHTML = commercialBatchesHTML;', display);
+  const empty = display.commercialBatchesHTML({});
+  assert.match(empty, /Nenhuma mensagem preparada/);
+  const html = display.commercialBatchesHTML({ b: { rows: [{ job_id: 'j', name: 'X', channel: 'email', eligible: true }], capacity: { approvable_now: 2 } } });
+  assert.match(html, /Aprovar seleção e iniciar envio/);
+  assert.match(html, /disabled/);
 });
 
 test('mensagem antiga com telefone exige revisão e não oferece ações de envio ou cópia', () => {

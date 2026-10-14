@@ -63,14 +63,19 @@ class WorkflowTests(unittest.TestCase):
         jid = self.add()
         self.add('Other Candidate', 'https://other-candidate.example')
         self.publish(jid)
-        control.preview_finish(jid, 'codex')
+        finished = control.preview_finish(jid, 'codex')
+        self.assertEqual(finished['contact_status'], 'prepared')
         progress = control.batch_status(self.bid, 'complete')
         self.assertEqual((progress['published_count'], progress['remaining_count']), (1, 0))
         self.assertEqual(progress['evaluating_count'], 1)
         self.assertEqual(progress['pending_count'], 1)
-        self.assertEqual(control.snapshot()['jobs'][0]['contact_status'], 'not_sent')
+        prepared_job = control.snapshot()['jobs'][0]
+        self.assertEqual(prepared_job['contact_status'], 'prepared')
+        self.assertEqual(prepared_job['data']['commercial_contact']['channel'], 'email')
+        self.assertIn('Ver a prévia do site', prepared_job['data']['commercial_contact']['message'])
         with control.connect() as con:
             self.assertEqual(con.execute('SELECT COUNT(*) FROM submissions').fetchone()[0], 0)
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM commercial_attempts').fetchone()[0], 0)
 
     def test_first_site_null_domain(self):
         jid = self.add(url='', aliases=['phone:+5514999999999'])
