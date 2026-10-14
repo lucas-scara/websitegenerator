@@ -4,6 +4,7 @@ import datetime as dt
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -55,6 +56,17 @@ def authorization_time(value):
         raise ValueError('Authorization date and time requires timezone')
     return parsed
 
+def approval_digest(job):
+    """Bind a reviewed Gmail approval to the exact outgoing contact and preview."""
+    data = json.loads(job['data']) if isinstance(job['data'], str) else job['data']
+    prepared = data.get('commercial_contact') or {}
+    reviewed = {'job_id': job['id'], 'batch_id': job['batch_id'],
+                'channel': prepared.get('channel'), 'recipient': prepared.get('destination'),
+                'subject': prepared.get('subject'), 'message': prepared.get('message'),
+                'preview_url': job['preview_url']}
+    payload = json.dumps(reviewed, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
 def authorization(ledger, job, *, live=False):
     path = private_path(ledger, AUTH_FILE, 'gmail-authorization.json')
     try:
@@ -86,6 +98,12 @@ def authorization(ledger, job, *, live=False):
     if not valid:
         if live: raise ValueError('Gmail live authorization does not include this company and scope')
         return {'mode': 'live', 'authorized': False, 'reason': 'Empresa fora do escopo aprovado'}
+    if auth.get('approval_version') == 2:
+        reviewed = auth.get('reviewed')
+        if (not isinstance(reviewed, dict) or set(reviewed) != set(auth['job_ids'])
+                or reviewed.get(job['id']) != approval_digest(job)):
+            if live: raise ValueError('Reviewed Gmail contact or preview changed; new approval required')
+            return {'mode': 'live', 'authorized': False, 'reason': 'Contato ou prévia alterados; nova aprovação necessária'}
     sender = auth['sender'].lower()
     try: sender_config(ledger, sender)
     except (ValueError, PreSendError) as exc:

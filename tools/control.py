@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 import sqlite3
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 import uuid
@@ -19,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from quick_site import create as create_quick_site, TEMPLATES, profile, validate as validate_quick_site
 import commercial
 import gmail_outreach
+import batch_commercial
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = Path(os.environ.get('REVAMP_DB', ROOT / 'data' / 'revamp.sqlite3'))
@@ -284,7 +286,20 @@ def batch_status(bid, status):
         if status == 'complete' and progress['remaining_count']:
             raise ValueError(f"Batch needs {progress['remaining_count']} more verified public previews")
         c.execute('UPDATE batches SET status=? WHERE id=?', (status, bid))
-        return {'status': status, **progress}
+    prepared = 0
+    preparation_errors = {}
+    if status in ('complete', 'exhausted'):
+        with connect() as c:
+            ready_ids = [j['id'] for j in c.execute("SELECT * FROM jobs WHERE batch_id=? AND contact_status IN ('not_sent','pending')", (bid,))
+                         if production_status(j) == 'published']
+        for jid in ready_ids:
+            result = auto_prepare_commercial(jid)
+            if result.get('commercial_preparation_error'):
+                preparation_errors[jid] = result['commercial_preparation_error']
+            elif result['contact_status'] == 'prepared':
+                prepared += 1
+    return {'status': status, **progress, 'commercial_prepared_count': prepared,
+            'commercial_preparation_errors': preparation_errors}
 
 def snapshot():
     with connect() as c:
@@ -314,7 +329,8 @@ def snapshot():
         out['settings'] = {'batch_size': 3, **{key: int(c.execute('SELECT value FROM config WHERE key=?', (key,)).fetchone()[0]) for key in operation_limits()}}
         out['templates'] = [{'id': k, 'name': v['name']} for k,v in TEMPLATES.items()]
         out['server_time'] = now()
-        return out
+    out['commercial_batches'] = {b['id']: batch_commercial.review(gmail_ledger(), b['id']) for b in out['batches']}
+    return out
 
 def batch(industry, city, requested_count=3):
     if not isinstance(industry, str) or not isinstance(city, str) or not industry.strip() or not city.strip():
@@ -689,8 +705,31 @@ def preview_finish(jid, worker):
         stage_finish(c,jid)
         c.execute('UPDATE jobs SET worker=NULL,updated_at=? WHERE id=?', (now(), jid))
         c.execute("UPDATE workers SET status='idle',updated_at=? WHERE id=?", (now(), worker))
-        event(c, jid, 'Verified commercial preview completed; no contact performed.')
-        return {'id': jid, 'production_status': 'published', 'contact_status': j['contact_status']}
+        event(c, jid, 'Verified commercial preview completed; preparing contact without sending.')
+    return auto_prepare_commercial(jid)
+
+def auto_prepare_commercial(jid):
+    """Retryable local preparation after verified publication; never sends contact."""
+    with connect() as c:
+        job = c.execute('SELECT * FROM jobs WHERE id=?', (jid,)).fetchone()
+        if job is None or production_status(job) != 'published':
+            raise ValueError('Only a verified public preview can be prepared')
+        data = json.loads(job['data'])
+        if job['contact_status'] == 'prepared' and (data.get('commercial_contact') or {}).get('message'):
+            return {'id': jid, 'production_status': 'published', 'contact_status': 'prepared',
+                    'commercial_contact': data['commercial_contact']}
+        failure = (data.get('verification') or {}).get('technical_failure') or {}
+        observation = failure.get('result', '') if data.get('presence_status') == 'site_inoperante' else ''
+    try:
+        prepared = prepare_commercial(jid, observation)
+        return {'id': jid, 'production_status': 'published',
+                'contact_status': 'prepared' if prepared.get('message') else 'pending',
+                'commercial_contact': prepared}
+    except ValueError as exc:
+        with connect() as c:
+            event(c, jid, 'Automatic commercial preparation pending: ' + str(exc))
+        return {'id': jid, 'production_status': 'published',
+                'contact_status': job['contact_status'], 'commercial_preparation_error': str(exc)}
 
 def recover(jid, reason):
     if not reason.strip(): raise ValueError('Recovery reason required')
@@ -1147,7 +1186,7 @@ def serve(port):
             origin=self.headers.get('Origin')
             if not self.valid_host() or origin not in (f'http://127.0.0.1:{self.server.server_port}',f'http://localhost:{self.server.server_port}'):
                 return self.send(403,{'error':'Same-origin browser request required'})
-            if self.path not in ('/api/batches','/api/sites','/api/commercial/prepare','/api/commercial/regenerate','/api/commercial/record','/api/commercial/gmail-simulate','/api/commercial/gmail-send','/api/commercial/gmail-followup'): return self.send(404,{'error':'Not found'})
+            if self.path not in ('/api/batches','/api/sites','/api/commercial/prepare','/api/commercial/regenerate','/api/commercial/record','/api/commercial/gmail-simulate','/api/commercial/gmail-send','/api/commercial/gmail-followup','/api/commercial/batch-approve'): return self.send(404,{'error':'Not found'})
             try:
                 size=int(self.headers.get('Content-Length','0'))
                 if size<1 or size>8192 or self.headers.get_content_type()!='application/json': raise ValueError('JSON body required (8 KB maximum)')
@@ -1160,6 +1199,8 @@ def serve(port):
                     self.send(200,record_commercial(data.get('job_id'),data.get('status'),data.get('evidence',''),data.get('channel',''),data.get('proof','')))
                 elif self.path=='/api/commercial/gmail-simulate':
                     self.send(200,gmail_outreach.simulate(gmail_ledger(),data.get('job_id')))
+                elif self.path=='/api/commercial/batch-approve':
+                    self.send(200,batch_commercial.approve(gmail_ledger(),data.get('batch_id'),data.get('job_ids'),data.get('reviewed'),start_dispatch=True))
                 elif self.path=='/api/commercial/gmail-send':
                     self.send(200,gmail_outreach.dispatch(gmail_ledger(),data.get('job_id')))
                 elif self.path=='/api/commercial/gmail-followup':
@@ -1171,10 +1212,13 @@ def serve(port):
                 else: self.send(201,batch(data.get('industry'),data.get('city'),data.get('requested_count',3)))
             except (ValueError,AttributeError) as e: self.send(400,{'error':str(e)})
     server=ThreadingHTTPServer(('127.0.0.1',port),Handler)
+    # An approval may outlive a dashboard restart. Reservations in SQLite prevent replay.
+    threading.Thread(target=batch_commercial.resume, args=(gmail_ledger(),), daemon=True).start()
     print(f'Contact sheet: http://127.0.0.1:{server.server_port}',flush=True)
     server.serve_forever()
 
 def main():
+    load_commercial_env()
     p=argparse.ArgumentParser(description=__doc__); sub=p.add_subparsers(dest='cmd',required=True)
     sub.add_parser('state')
     s=sub.add_parser('serve'); s.add_argument('--port',type=int,default=4310)

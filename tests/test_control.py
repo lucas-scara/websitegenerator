@@ -6,6 +6,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('control', Path(__file__).parents[1] / 'tools/control.py')
 control = importlib.util.module_from_spec(spec)
@@ -63,14 +64,34 @@ class WorkflowTests(unittest.TestCase):
         jid = self.add()
         self.add('Other Candidate', 'https://other-candidate.example')
         self.publish(jid)
-        control.preview_finish(jid, 'codex')
+        finished = control.preview_finish(jid, 'codex')
+        self.assertEqual(finished['contact_status'], 'prepared')
         progress = control.batch_status(self.bid, 'complete')
         self.assertEqual((progress['published_count'], progress['remaining_count']), (1, 0))
         self.assertEqual(progress['evaluating_count'], 1)
         self.assertEqual(progress['pending_count'], 1)
-        self.assertEqual(control.snapshot()['jobs'][0]['contact_status'], 'not_sent')
+        prepared_job = control.snapshot()['jobs'][0]
+        self.assertEqual(prepared_job['contact_status'], 'prepared')
+        self.assertEqual(prepared_job['data']['commercial_contact']['channel'], 'email')
+        self.assertIn('Ver a prévia do site', prepared_job['data']['commercial_contact']['message'])
         with control.connect() as con:
             self.assertEqual(con.execute('SELECT COUNT(*) FROM submissions').fetchone()[0], 0)
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM commercial_attempts').fetchone()[0], 0)
+
+    def test_auto_commercial_preparation_failure_remains_tracked(self):
+        jid = self.add()
+        self.publish(jid)
+        with patch.object(control, 'prepare_commercial', side_effect=ValueError('temporary preparation failure')):
+            result = control.auto_prepare_commercial(jid)
+        self.assertEqual(result['id'], jid)
+        self.assertEqual(result['contact_status'], 'not_sent')
+        self.assertIn('temporary preparation failure', result['commercial_preparation_error'])
+        with control.connect() as con:
+            job = con.execute('SELECT contact_status,stage FROM jobs WHERE id=?', (jid,)).fetchone()
+            events = list(con.execute('SELECT message FROM events WHERE job_id=?', (jid,)))
+        self.assertEqual(job['contact_status'], 'not_sent')
+        self.assertEqual(job['stage'], 'ready')
+        self.assertTrue(any('temporary preparation failure' in event['message'] for event in events))
 
     def test_first_site_null_domain(self):
         jid = self.add(url='', aliases=['phone:+5514999999999'])

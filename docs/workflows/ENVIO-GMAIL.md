@@ -1,6 +1,6 @@
 # Envio comercial por Gmail
 
-O envio usa a mensagem e o canal preparados em `commercial-prepare`. O estado de produção do site não muda. O padrão é `dry_run`: sem autorização privada explícita, `gmail-send` falha antes de reservar tentativa. `gmail-simulate` apenas valida e mostra o plano; nunca chama Gmail.
+O envio usa a mensagem e o canal preparados automaticamente quando a prévia é finalizada com sucesso. O operador revisa o lote no dashboard e uma aprovação explícita dos destinatários selecionados cria a autorização; a mesma ação inicia o despacho sequencial. Nenhum envio ocorre antes dessa aprovação. `gmail-simulate` continua disponível para diagnóstico, mas não é uma etapa obrigatória do primeiro piloto real. Não execute lote real nem envie e-mail durante desenvolvimento ou testes.
 
 ## Configuração local
 
@@ -30,33 +30,19 @@ Após autenticar a conta Gmail aprovada, crie `data/gmail-sender.json` com permi
 
 `gmail.send` não permite consultar o perfil Gmail. O backend compara a identidade verificada pelo endpoint OAuth UserInfo com o remetente aprovado. Se qualquer etapa faltar, o envio live permanece desabilitado.
 
-## Autorização de um lote
+## Revisão e aprovação do lote
 
-Prepare e revise as mensagens. Formulários comerciais elegíveis continuam tendo prioridade sobre e-mail. Crie `data/gmail-authorization.json` somente depois da aprovação expressa do operador, com permissão 600:
+No dashboard, abra a visão comercial do lote e confira empresa, segmento, oportunidade, URL HTTPS, destinatário, assunto, mensagem, canal, elegibilidade e impedimentos. Selecione os contatos elegíveis desejados; apenas canal `email` pode entrar no despacho Gmail. Formulário elegível mantém prioridade e WhatsApp fica manual. Contatos sem e-mail elegível continuam pendentes, sem roteamento alternativo automático.
 
-```json
-{
-  "mode": "live",
-  "approved_by": "Lucas Scaranello",
-  "approved_at": "2026-10-12T12:00:00Z",
-  "expires_at": "2026-10-19T12:00:00Z",
-  "batch_id": "batch-ID_REAL",
-  "job_ids": ["job-ID_APROVADO"],
-  "sender": "scarasoftbauru@gmail.com",
-  "max_contacts": 1,
-  "daily_limit": 5
-}
-```
+Confira a capacidade apresentada antes de aprovar: tentativas anteriores do mesmo lote são acumuladas no limite de contatos, enquanto o limite diário global de 5 considera todos os lotes. A aprovação informa quantos novos envios cabem agora. Ao clicar **Aprovar seleção e iniciar envio**, o backend valida novamente remetente, seleção, elegibilidade e capacidade e grava `data/gmail-authorization.json` com permissão 600, validade de 24 horas, IDs selecionados e resumo dos dados revisados. A autorização não é criada pela conclusão da produção. Se destinatário, canal, conteúdo ou prévia mudar depois da aprovação, os dados não coincidem com a revisão e o envio é bloqueado até nova validação e aprovação.
 
-`job_ids` é a seleção explícita de empresas. `approved_at` exige data e hora ISO com fuso e não pode estar no futuro. `expires_at` é opcional; quando informado, deve ser posterior à aprovação e ao momento do envio. `max_contacts` limita tentativas do lote, incluindo falhas anteriores; `daily_limit` limita tentativas em UTC em todos os lotes e vale 5 se omitido. Para simular ou desabilitar, altere `mode` para `dry_run` ou remova o arquivo. O dashboard e a prospecção não criam nem alteram essa autorização. Editar um arquivo local protegido é a aprovação operacional; não há botão no dashboard para aprovar lote.
+O botão inicia o despacho sequencial. O backend revalida cada contato imediatamente antes do envio, aplica os limites e registra tentativa e resultado. Uma autorização ativa com contatos pendentes não pode ser substituída por outra aprovação, mesmo após reiniciar o dashboard. Na retomada, contatos com tentativa existente não são reenviados; `attempting` e `uncertain` exigem reconciliação, enquanto contatos aprovados sem tentativa podem seguir sequencialmente. Ao concluir todos os contatos com resultado definido, o backend fecha a autorização. Falha inesperada pausa o despacho, registra a falha operacional e impede retomada automática. Cada mensagem tem um destinatário, corpo UTF-8 e não contém CC, BCC ou anexos. O e-mail inicial tem versão HTML com o texto clicável **Ver a prévia do site** e versão texto simples com a URL explícita como fallback para leitores sem HTML.
 
-Execute `python3 tools/control.py gmail-simulate --job ID` para validar sem reservar tentativa. A resposta separa `commercial_eligibility` (prévia, canal, destinatário e histórico) de `authorization` e `live_authorized` (aprovação local e capacidade do lote e do dia). `would_send_live` só é verdadeiro quando ambos permitem tentar o envio; a simulação permanece em `dry_run`, não usa Gmail e não verifica o token OAuth. Depois de confirmar os campos no dashboard, use **Enviar via Gmail** ou `python3 tools/control.py gmail-send --job ID`. Ambos aplicam as mesmas verificações no backend. Cada mensagem tem um destinatário, corpo UTF-8 e não contém CC, BCC ou anexos. A mensagem preparada inclui a identidade comercial e instrução de opt-out. O e-mail inicial tem versão HTML com o texto clicável **Ver a prévia do site** e versão texto simples com a URL explícita como fallback para leitores sem HTML; o dashboard mostra apenas o texto do link e oferece a prévia separadamente.
-
-Mensagens antigas ainda preparadas com número de telefone no texto ficam marcadas para revisão no dashboard. O backend bloqueia `gmail-send` antes de reservar a tentativa; simular mostra a inelegibilidade. Quando a prévia, o canal e o destinatário continuam válidos e não há envio nem tentativa incerta ou pendente, use **Regenerar mensagem sem telefone** no dashboard ou `commercial-regenerate --job ID`. Revise a nova mensagem antes de qualquer envio. A ação não usa Gmail e registra a alteração em `events`; mensagens já enviadas e tentativas históricas permanecem intactas.
+`python3 tools/control.py gmail-simulate --job ID` permanece disponível para diagnóstico sem reservar tentativa nem usar Gmail. Não substitui a revisão ou aprovação explícita e não é obrigatório antes do primeiro piloto real.
 
 ## Acompanhamento
 
-O dashboard mostra a data do primeiro envio confirmado e os marcos de **dia 4** e **dia 10**. A data é calculada em UTC a partir da tentativa inicial. Não existe agendamento, envio automático nem notificação externa. Quando o dia chega, o operador revisa a mensagem e aciona **Enviar follow-up na mesma conversa**. O backend exige a mesma autorização local, empresa selecionada, limite diário, ausência de resposta/recusa e confirmação da etapa anterior. O máximo de contatos do lote conta empresas no primeiro envio; o limite diário conta todos os envios, inclusive follow-ups.
+O dashboard mostra a data do primeiro envio confirmado e os marcos de **dia 4** e **dia 10**. A data é calculada em UTC a partir da tentativa inicial. Não existe agendamento, envio automático nem notificação externa. Quando o dia chega, o operador revisa a mensagem e aciona **Enviar follow-up na mesma conversa**. Como a autorização do despacho inicial é encerrada ao fim do lote, cada follow-up exige autorização local válida novamente pelo mecanismo existente. O backend exige empresa selecionada, limite diário, ausência de resposta/recusa e confirmação da etapa anterior. O máximo de contatos do lote conta empresas no primeiro envio; o limite diário conta todos os envios, inclusive follow-ups.
 
 ```sh
 python3 tools/control.py gmail-followup --job ID --touch 1  # dia 4
