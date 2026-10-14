@@ -176,12 +176,67 @@ class BatchCommercialTests(unittest.TestCase):
         # A different batch still shares the daily limit.
         other_batch = control.batch('chaveiros', 'Campinas, SP', 1)['id']
         other = self.add_job_in_batch(other_batch, 'Outra Empresa', 'outra@example.org')
-        with self.assertRaisesRegex(ValueError, 'limits'):
-            self.approve(other_batch, [other])
-        self.assertEqual(batch_commercial.review(self.ledger, other_batch)['capacity']['remaining_daily'], 0)
-        # No authorization is written after a denied approval.
+        self.assertEqual(batch_commercial.review(self.ledger, other_batch)['capacity']['remaining_daily'], 15)
+        self.approve(other_batch, [other])
         auth = json.loads(Path(gmail.AUTH_FILE).read_text())
-        self.assertEqual(auth['batch_id'], self.batch_id)
+        self.assertEqual(auth['batch_id'], other_batch)
+
+    def test_global_daily_limit_is_twenty_across_batches(self):
+        """The UTC cap is global even when each batch has its own approval."""
+        # The fixture batch contributes four attempts; finish four more batches
+        # to reach the shared daily cap of twenty.
+        self.approve(self.batch_id, self.jobs)
+        batch_commercial.dispatch_batch(self.ledger, self.batch_id,
+                                        client_factory=lambda: FakeGmail())
+        for index in range(4):
+            batch_id = control.batch('chaveiros', f'Cidade {index}', 4)['id']
+            jobs = [self.add_job_in_batch(batch_id, f'Empresa {index}-{n}',
+                                          f'empresa{index}-{n}@example.org')
+                    for n in range(4)]
+            self.approve(batch_id, jobs)
+            result = batch_commercial.dispatch_batch(self.ledger, batch_id,
+                                                     client_factory=lambda: FakeGmail())
+            self.assertEqual(result['report']['counts']['sent'], 4)
+        self.assertEqual(batch_commercial.review(self.ledger, self.batch_id)['capacity']['remaining_daily'], 0)
+        denied_batch = control.batch('chaveiros', 'Última cidade', 4)['id']
+        pending = self.add_job_in_batch(denied_batch, 'Empresa Vinte e Um', 'empresa21@example.org')
+        with self.assertRaisesRegex(ValueError, 'daily limits'):
+            self.approve(denied_batch, [pending])
+
+    def test_new_authorizations_use_global_limit_and_batch_stays_at_100(self):
+        batch_id = control.batch('chaveiros', 'Campinas, SP', 100)['id']
+        jobs = [self.add_job_in_batch(batch_id, f'Empresa {n}', f'lote{n}@example.org')
+                for n in range(20)]
+        reviewed = batch_commercial.review(self.ledger, batch_id)
+        self.assertEqual(reviewed['capacity']['remaining_batch'], 100)
+        self.assertEqual(reviewed['capacity']['remaining_daily'], 20)
+        approval = self.approve(batch_id, jobs[:2])
+        auth = json.loads(Path(gmail.AUTH_FILE).read_text())
+        self.assertEqual(auth['daily_limit'], 20)
+        self.assertEqual(approval['capacity']['remaining_daily'], 18)
+
+    def test_old_restrictive_pending_authorization_cannot_be_replaced(self):
+        self.approve(self.batch_id, [self.jobs[0]])
+        auth = json.loads(Path(gmail.AUTH_FILE).read_text())
+        auth['daily_limit'] = 5
+        self.private(Path(gmail.AUTH_FILE), auth)
+        with self.assertRaisesRegex(ValueError, 'pending contacts'):
+            self.approve(self.batch_id, [self.jobs[1]])
+        self.assertEqual(json.loads(Path(gmail.AUTH_FILE).read_text())['job_ids'], [self.jobs[0]])
+
+    def test_completed_old_authorization_does_not_lower_new_approval(self):
+        self.approve(self.batch_id, [self.jobs[0]])
+        auth_path = Path(gmail.AUTH_FILE)
+        old = json.loads(auth_path.read_text())
+        old['daily_limit'] = 5
+        self.private(auth_path, old)
+        result = batch_commercial.dispatch_batch(self.ledger, self.batch_id,
+                                                 client_factory=lambda: FakeGmail())
+        self.assertEqual(result['status'], 'complete')
+        self.approve(self.batch_id, [self.jobs[1]])
+        new = json.loads(auth_path.read_text())
+        self.assertEqual(new['daily_limit'], 20)
+        self.assertNotEqual(new['approval_id'], old['approval_id'])
 
     def test_approval_returns_nested_capacity_consistent_with_review(self):
         selected = self.jobs[:2]
@@ -277,10 +332,10 @@ class BatchCommercialTests(unittest.TestCase):
         # Concurrent or earlier jobs may consume capacity after approval; dispatch still checks.
         selected = self.jobs[:2]
         self.approve(self.batch_id, selected)
-        # Seed four already-recorded Gmail attempts from separate jobs using the normal ledger schema.
-        extra_batch = control.batch('chaveiros', 'Ribeirão Preto, SP', 4)['id']
+        # Seed nineteen already-recorded Gmail attempts from separate jobs.
+        extra_batch = control.batch('chaveiros', 'Ribeirão Preto, SP', 100)['id']
         existing = [self.add_job_in_batch(extra_batch, f'Anterior {i}', f'anterior{i}@example.org')
-                    for i in range(1, 5)]
+                    for i in range(1, 20)]
         for jid in existing:
             with control.connect() as c:
                 c.execute('''INSERT INTO commercial_attempts

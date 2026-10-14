@@ -16,6 +16,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/gmail.send'
 ]
 APPROVED_SENDER = 'scarasoftbauru@gmail.com'
+DAILY_LIMIT = 20
 AUTH_FILE = None  # resolved against the ledger root, or overridden in tests
 SENDER_FILE = None
 TOKEN_FILE = None
@@ -94,7 +95,8 @@ def authorization(ledger, job, *, live=False):
              and len(auth['job_ids']) == len(set(auth['job_ids']))
              and auth.get('sender') == APPROVED_SENDER
              and type(auth.get('max_contacts')) is int and 1 <= auth['max_contacts'] <= 100
-             and type(auth.get('daily_limit', 5)) is int and 1 <= auth.get('daily_limit', 5) <= 100)
+             and type(auth.get('daily_limit', DAILY_LIMIT)) is int
+             and 1 <= auth.get('daily_limit', DAILY_LIMIT) <= 100)
     if not valid:
         if live: raise ValueError('Gmail live authorization does not include this company and scope')
         return {'mode': 'live', 'authorized': False, 'reason': 'Empresa fora do escopo aprovado'}
@@ -110,7 +112,7 @@ def authorization(ledger, job, *, live=False):
         if live: raise ValueError(str(exc)) from exc
         return {'mode': 'live', 'authorized': False, 'reason': 'Remetente Gmail não configurado ou não verificado'}
     return {'mode': 'live', 'authorized': True, 'sender': sender,
-            'max_contacts': auth['max_contacts'], 'daily_limit': auth.get('daily_limit', 5),
+            'max_contacts': auth['max_contacts'], 'daily_limit': auth.get('daily_limit', DAILY_LIMIT),
             'reason': 'Autorizado localmente'}
 
 def sender_config(ledger, sender):
@@ -224,7 +226,7 @@ def limits(c, job, auth, now, touch=0):
         raise ValueError('Authorized Gmail batch contact limit reached')
     today = now[:10]
     daily_count = c.execute("SELECT COUNT(*) FROM commercial_attempts WHERE source='gmail_api' AND substr(created_at,1,10)=?", (today,)).fetchone()[0]
-    if daily_count >= auth['daily_limit']:
+    if daily_count >= min(DAILY_LIMIT, auth['daily_limit']):
         raise ValueError('Gmail daily authorization limit reached')
 
 def dispatch(ledger, jid, client=None, touch=0):

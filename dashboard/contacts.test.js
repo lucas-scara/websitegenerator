@@ -149,7 +149,7 @@ test('visão de lote mostra mensagem integral, capacidade e permite selecionar a
     { job_id: 'j1', name: 'Oficina Um', segment: 'Oficina', opportunity_type: 'Sem site', preview_url: 'https://example.org/p', recipient: 'a@example.org', subject: 'Assunto', message: 'Mensagem completa sem corte.', channel: 'email', eligible: true, blockers: [] },
     { job_id: 'j2', name: 'Oficina Dois', recipient: '14 99999-1111', channel: 'whatsapp_manual', eligible: true, blockers: [] },
     { job_id: 'j3', name: 'Oficina Três', recipient: 'b@example.org', channel: 'email', eligible: false, blockers: ['Opt-out registrado'] }
-  ], counts: { prospected: 3, in_production: 1, previews_verified: 2, messages_prepared: 2, awaiting_approval: 1, sending: 0, sent: 1, blocked: 1, uncertain: 0 }, duration_seconds: { discovery: 4, publish: 8 }, capacity: { prior_attempts: 1, remaining_batch: 4, remaining_daily: 8, approvable_now: 4 } } });
+  ], counts: { prospected: 3, in_production: 1, previews_verified: 2, messages_prepared: 2, awaiting_approval: 1, sending: 0, sent: 1, blocked: 1, uncertain: 0 }, duration_seconds: { discovery: 4, publish: 8 }, capacity: { prior_attempts: 1, remaining_batch: 4, daily_limit: 20, remaining_daily: 8, approvable_now: 4 } } });
   assert.match(html, /Mensagem completa sem corte\./);
   assert.match(html, /<strong>Assunto:<\/strong>/);
   assert.match(html, /Em produção 1/);
@@ -159,9 +159,13 @@ test('visão de lote mostra mensagem integral, capacidade e permite selecionar a
   assert.match(html, /disabled aria-label="Selecionar Oficina Três"/);
   assert.match(html, /Opt-out registrado/);
   assert.match(html, /1 tentativas anteriores/);
+  assert.match(html, /20 tentativas globais por dia UTC/);
   assert.match(html, /12\.0 s/);
   assert.match(html, /Discovery: 4\.0 s/);
   assert.doesNotMatch(html, /javascript:/);
+  const legacy = display.commercialBatchesHTML({ batch: { rows: [], capacity: { remaining_daily: 8 } } });
+  assert.match(legacy, /8 restantes hoje/);
+  assert.doesNotMatch(legacy, /tentativas globais por dia UTC/);
 });
 
 test('feedback da aprovação usa capacidade após reservar os contatos selecionados', () => {

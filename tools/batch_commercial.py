@@ -8,7 +8,7 @@ import uuid
 
 import gmail_outreach as gmail
 
-DAILY_LIMIT = 5
+DAILY_LIMIT = gmail.DAILY_LIMIT
 COMMERCIAL_EMAIL = 'contato@scarasoft.com.br'
 _dispatch_lock = threading.Lock()
 
@@ -80,6 +80,7 @@ def _counts(c, batch_id, current_time):
     daily = c.execute("SELECT COUNT(*) FROM commercial_attempts WHERE source='gmail_api' AND substr(created_at,1,10)=?",
                       (current_time[:10],)).fetchone()[0]
     return {'prior_attempts': prior, 'remaining_batch': max(0, 100-prior),
+            'daily_limit': DAILY_LIMIT,
             'remaining_daily': max(0, DAILY_LIMIT-daily),
             'approvable_now': max(0, min(100-prior, DAILY_LIMIT-daily))}
 

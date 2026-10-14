@@ -59,7 +59,7 @@ class GmailTests(unittest.TestCase):
     def private(self, path, data):
         path.write_text(json.dumps(data))
         path.chmod(0o600)
-    def authorize(self, jobs=None, max_contacts=3, daily_limit=5, sender='scarasoftbauru@gmail.com', **overrides):
+    def authorize(self, jobs=None, max_contacts=3, daily_limit=20, sender='scarasoftbauru@gmail.com', **overrides):
         auth = {'mode':'live','approved_by':'Lucas Scaranello',
                      'approved_at':control.now(),'batch_id':self.batch,'job_ids':jobs or [self.job],
                      'sender':sender,'max_contacts':max_contacts,'daily_limit':daily_limit}
@@ -81,6 +81,18 @@ class GmailTests(unittest.TestCase):
         return control.prepare_commercial(jid or self.job)
     def dispatch(self, jid=None, client=None):
         return gmail.dispatch(control.gmail_ledger(), jid or self.job, client or FakeGmail())
+
+    def seed_sent_attempts(self, count):
+        """Fill today's global Gmail ledger using isolated historical contacts."""
+        for index in range(count):
+            batch_id = control.batch('chaveiros', f'Cidade anterior {index}', 1)['id']
+            jid = control.add(batch_id, f'Contato anterior {index}')['id']
+            with control.connect() as c:
+                c.execute('''INSERT INTO commercial_attempts
+                    (job_id,channel,status,message,evidence,created_at,source,recipient,sender,subject,touch)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,0)''',
+                    (jid, 'email', 'sent', 'prior', 'confirmed', control.now(), 'gmail_api',
+                     f'prior{index}@example.org', 'scarasoftbauru@gmail.com', 'Prior'))
 
     def test_dry_run_and_missing_authorization(self):
         self.prepare()
@@ -223,6 +235,30 @@ class GmailTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'daily'): self.dispatch(other)
         self.authorize(jobs=[self.job,other],daily_limit=5,max_contacts=1)
         with self.assertRaisesRegex(ValueError,'batch'): self.dispatch(other)
+
+    def test_legacy_daily_limit_five_remains_restrictive(self):
+        self.prepare()
+        self.authorize(daily_limit=5)
+        self.seed_sent_attempts(5)
+        with self.assertRaisesRegex(ValueError, 'daily'):
+            self.dispatch()
+
+    def test_missing_authorization_daily_limit_defaults_to_twenty(self):
+        self.prepare()
+        self.authorize(max_contacts=100)
+        auth = json.loads(gmail.AUTH_FILE.read_text())
+        del auth['daily_limit']
+        self.private(gmail.AUTH_FILE, auth)
+        self.seed_sent_attempts(19)
+        result = self.dispatch()
+        self.assertEqual(result['status'], 'sent')
+
+    def test_authorization_above_twenty_cannot_raise_global_cap(self):
+        self.prepare()
+        self.authorize(max_contacts=100, daily_limit=100)
+        self.seed_sent_attempts(20)
+        with self.assertRaisesRegex(ValueError, 'daily'):
+            self.dispatch()
     def test_optout_prior_contact_and_form_priority(self):
         self.prepare(); self.authorize()
         control.record_commercial(self.job,'opted_out','Empresa recusou')
